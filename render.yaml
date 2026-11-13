@@ -13,9 +13,9 @@ services:
       - key: APP_ENV
         value: production
       - key: ALLOWED_ORIGINS
-        sync: false
+        value: https://edusphere-front.onrender.com
       - key: APP_URL
-        sync: false
+        value: https://edusphere-front.onrender.com
       - key: DB_DRIVER
         value: mysql
       - key: JWT_SECRET
