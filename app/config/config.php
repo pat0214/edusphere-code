@@ -365,7 +365,7 @@ $config['csrf_regenerate']         = FALSE;
 |   ];
 |
 */
-$allowed_origins = getenv('ALLOWED_ORIGINS') ?: 'http://localhost:5173,http://localhost:3000';
+$allowed_origins = getenv('ALLOWED_ORIGINS') ?: 'https://edusphere-front.onrender.com,http://localhost:5173,http://localhost:3000';
 
 $config['security_headers'] = [
     // ── CSP ──
