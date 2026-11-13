@@ -62,7 +62,7 @@ When `DB_SSL_CA` points to Aiven's CA certificate, the LavaLust PDO connection v
 
 ## Render deploy
 
-`render.yaml` is a blueprint for one Docker web service. The Dockerfile builds this complete LavaLust project, enables `mod_rewrite` for LavaLust's `public/index.php`, installs `pdo_mysql`, and honors Render's `PORT`. The Apache `www-data` user is added to group `1000` so it can read Render Docker Secret Files. The blueprint also provisions a persistent disk for uploaded course materials and defaults `APP_URL` and `ALLOWED_ORIGINS` to `https://edusphere-front.onrender.com`. If the frontend uses a different URL, update both values in the Render service dashboard. Upload the Aiven CA as a Render Secret File named `aiven-ca.pem`; set the DB environment variables in the service dashboard. Health check: `/api/v1/health`.
+`render.yaml` is a blueprint for one Docker web service. The Dockerfile builds this complete LavaLust project, enables `mod_rewrite` for LavaLust's `public/index.php`, installs `pdo_mysql`, and honors Render's `PORT`. The image creates group `1000` if needed and adds Apache's `www-data` user to it so it can read Render Docker Secret Files. The blueprint also provisions a persistent disk for uploaded course materials and defaults `APP_URL` and `ALLOWED_ORIGINS` to `https://edusphere-front.onrender.com`. If the frontend uses a different URL, update both values in the Render service dashboard. Upload the Aiven CA as a Render Secret File named `aiven-ca.pem`; set the DB environment variables in the service dashboard. Health check: `/api/v1/health`.
 
 ## React frontend integration and current scope
 
