@@ -23,7 +23,8 @@ RUN sed -ri "s!/var/www/html!${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-avail
   && mkdir -p /var/www/html/runtime /var/www/html/.data \
   && chown -R www-data:www-data /var/www/html/runtime /var/www/html/.data \
   && chmod -R 755 /var/www/html \
-  && chmod -R 775 /var/www/html/runtime /var/www/html/.data
+  && chmod -R 775 /var/www/html/runtime /var/www/html/.data \
+  && usermod -aG 1000 www-data
 
 EXPOSE 80
 CMD ["sh", "-c", "port=${PORT:-80}; sed -ri \"s/^Listen .*/Listen ${port}/\" /etc/apache2/ports.conf; sed -ri \"s/<VirtualHost \\\\*:[0-9]+>/<VirtualHost *:${port}>/\" /etc/apache2/sites-available/000-default.conf; exec apache2-foreground"]
