@@ -113,8 +113,15 @@ class MetaController extends MY_Controller
     public function notifications()
     {
         $user = auth_user($this->users);
-        $rows = $this->meta->notificationsOf($user['id']);
-        respond(['rows' => $rows, 'unread' => count(array_filter($rows, fn($r) => !$r['read_at']))]);
+        $rows = array_map(static fn(array $row): array => [
+            'id' => $row['id'],
+            'type' => $row['type'],
+            'title' => $row['title'],
+            'body' => $row['body'],
+            'createdAt' => $row['created_at'],
+            'readAt' => $row['read_at'],
+        ], $this->meta->notificationsOf($user['id']));
+        respond(['rows' => $rows, 'unread' => count(array_filter($rows, fn($r) => !$r['readAt']))]);
     }
 
     public function notifications_read()
