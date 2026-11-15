@@ -49,9 +49,12 @@ class Auth_model extends Model
     public function rateLimited($key, $maximum, $windowSeconds): bool
     {
         $since = date('Y-m-d H:i:s', time() - $windowSeconds);
+        $action = strlen((string)$key) > 77
+            ? 'rl:h:' . hash('sha256', (string)$key)
+            : 'rl:' . $key;
         $count = (int)$this->db->raw(
             'SELECT COUNT(*) c FROM audit_logs WHERE action = ? AND created_at > ?',
-            ["rl:$key", $since]
+            [$action, $since]
         )->fetch(PDO::FETCH_ASSOC)['c'];
 
         if ($count >= $maximum) {
@@ -60,7 +63,7 @@ class Auth_model extends Model
 
         $this->db->raw(
             'INSERT INTO audit_logs (id, action, created_at) VALUES (?, ?, NOW())',
-            [uuid4(), "rl:$key"]
+            [uuid4(), $action]
         );
 
         return false;
