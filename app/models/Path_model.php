@@ -22,6 +22,18 @@ class Path_model extends Model
             ->get();
     }
 
+    public function syncDoneItemsFromLessonProgress($userId): void
+    {
+        $this->db->raw(
+            "UPDATE learning_path_items pi
+             JOIN learning_paths lp ON lp.id = pi.path_id
+             JOIN progress_records pr ON pr.user_id = lp.user_id AND pr.lesson_id = pi.lesson_id
+             SET pi.status = 'done', pi.completed_at = COALESCE(pi.completed_at, pr.completed_at)
+             WHERE lp.user_id = ? AND pi.status != 'done'",
+            [$userId]
+        );
+    }
+
     public function completedCourseIds($userId): array
     {
         return $this->db->raw(

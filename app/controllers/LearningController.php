@@ -139,6 +139,7 @@ class LearningController extends MY_Controller
     public function path()
     {
         $user = auth_user($this->users);
+        $this->paths_model->syncDoneItemsFromLessonProgress($user['id']);
         $this->paths_model->completeActivePathsFromLessonProgress($user['id']);
         $path = $this->paths_model->activeFor($user['id']);
         if (!$path) {
@@ -150,6 +151,7 @@ class LearningController extends MY_Controller
     public function path_generate()
     {
         $user = require_role($this->users, ['student']);
+        $this->paths_model->syncDoneItemsFromLessonProgress($user['id']);
         $this->paths_model->completeActivePathsFromLessonProgress($user['id']);
         $existing = $this->paths_model->activeFor($user['id']);
         $result = $this->paths->generate($user['id'], (bool)$existing);
