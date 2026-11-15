@@ -11,8 +11,8 @@
 
 ## 2. Create and populate the database
 
-1. Right-click the connection → New Database → name `edusphere`, charset `utf8mb4`, collation `utf8mb4_unicode_ci`.
-2. Double-click `edusphere` → Query editor → open `database/schema.sql` → Run. Expect 36 tables.
+1. If you are creating a new database, use the same name you will set as `DB_NAME` in Render. If Render already uses Aiven's `defaultdb`, do not create `edusphere`; use `defaultdb`.
+2. Double-click the database named by Render's `DB_NAME` (use `defaultdb` if that is what your API service is configured to use) → Query editor → open `database/schema.sql` → Run.
 3. Open `database/seed.sql` → Run. Expect 13 users, 36+ lesson skill links, 7 test cases (one generated inside the script with `WITH RECURSIVE`), 2 submissions, 3 pending peer assignments.
 4. Sanity check:
    ```sql
@@ -21,12 +21,18 @@
    select length(input) from test_cases where hidden = 1 and exercise_id = 'e-twosum';  -- ~ 678000
    ```
 
-## 3. Backup and restore
+## 3. Apply application migrations
+
+Run each migration required by the deployed version against that exact selected database. For current EduSphere features, apply `database/migrations/005_paymongo_one_time_payments.sql`, `006_module_quizzes.sql`, `007_ai_tutor.sql`, and `008_classrooms.sql` if they have not already been applied. Migration `008_classrooms.sql` creates the subject classroom, membership/invitation, live-session, encrypted Google connection, notification preference, and email queue tables. It is safe to rerun.
+
+After deploying the API, check `/api/v1/health`. It should show `db: "up"`, `classroomSchema: "ready"`, and `notificationEmailSchema: "ready"`. If either schema status says `migration_required`, confirm Render's `DB_NAME` and rerun the corresponding migration in that database.
+
+## 4. Backup and restore
 
 - **Backup**: Navicat → right-click `edusphere` → Dump SQL File → Structure and Data. Or cron: `mysqldump --ssl-mode=REQUIRED -h $DB_HOST -P $DB_PORT -u $DB_USER -p edusphere > backup-$(date +%F).sql`
 - **Restore**: create an empty `edusphere_restore` database, open the dump in the query editor, Run, then rename via `RENAME TABLE` or re-point `DB_NAME`.
 
-## 4. Connect the API
+## 5. Connect the API
 
 Set `DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME` and `DB_SSL_CA=/etc/ssl/aiven/ca.pem` in Render (secret file) or `.env` locally, then apply the 2-line PDO SSL patch from the root README. `/api/v1/health` returns `"db": "up"` when TLS is right.
 

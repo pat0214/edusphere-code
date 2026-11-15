@@ -28,11 +28,17 @@ class AuthController extends MY_Controller
         try {
             $this->auth->databaseAvailable();
             $tutor = $this->call->model('AiTutor_model');
+            $classrooms = $this->call->model('SubjectClassroom_model');
+            $meetings = $this->call->model('ClassroomMeeting_model');
+            $gamify = $this->call->model('Gamify_model');
             respond([
                 'service' => 'edusphere',
                 'version' => 'v1',
                 'db' => 'up',
                 'aiTutorSchema' => $tutor->schemaReady() ? 'ready' : 'migration_required',
+                'classroomSchema' => $classrooms->schemaReady() && $meetings->schemaReady() ? 'ready' : 'migration_required',
+                'notificationEmailSchema' => $gamify->emailQueueSchemaReady() ? 'ready' : 'migration_required',
+                'googleMeetConfigured' => (bool)(getenv('GOOGLE_OAUTH_CLIENT_ID') && getenv('GOOGLE_OAUTH_CLIENT_SECRET') && getenv('GOOGLE_OAUTH_REDIRECT_URI')) && $meetings->encryptionReady(),
             ], 'Healthy.');
         } catch (Throwable $e) {
             fail_api('Database unreachable.', 503);

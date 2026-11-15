@@ -22,7 +22,8 @@ class Gamify
 
     public function notify($userId, $type, $title, $body)
     {
-        $this->model->insertNotification($userId, $type, $title, $body);
+        $queued = $this->model->insertNotification($userId, $type, $title, $body);
+        if ($queued) return;
         $user = $this->model->notificationRecipient($userId);
         if (!$user) throw new RuntimeException("Cannot deliver notification: user $userId was not found.");
         if ($user['email_verified'] && !MailService::send(

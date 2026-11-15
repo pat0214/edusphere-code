@@ -44,6 +44,32 @@ $router->get ('/api/v1/coding-assignments/{id}/attempts', 'ClassroomController::
 $router->get ('/api/v1/coding-assignments/{id}',          'ClassroomController::detail');
 $router->patch('/api/v1/coding-assignments/{id}',         'ClassroomController::update');
 
+// ---- subject classrooms ----
+$router->get ('/api/v1/classrooms/google/callback',          'ClassroomMeetingController::callback');
+$router->get ('/api/v1/classrooms/google/connection',        'ClassroomMeetingController::connection');
+$router->post('/api/v1/classrooms/google/connect',           'ClassroomMeetingController::connect');
+$router->delete('/api/v1/classrooms/google/connection',      'ClassroomMeetingController::disconnect');
+$router->get ('/api/v1/classrooms',                         'SubjectClassroomController::index');
+$router->post('/api/v1/classrooms',                         'SubjectClassroomController::create');
+$router->get ('/api/v1/classrooms/invites/{token}',          'SubjectClassroomController::invitePreview');
+$router->post('/api/v1/classrooms/join/code',               'SubjectClassroomController::joinCode');
+$router->post('/api/v1/classrooms/join/invite/{token}',     'SubjectClassroomController::joinInvite');
+$router->get ('/api/v1/classrooms/{id}/members',             'SubjectClassroomController::members');
+$router->get ('/api/v1/classrooms/{id}/invite',              'SubjectClassroomController::inviteDetails');
+$router->patch('/api/v1/classrooms/{id}/invite',             'SubjectClassroomController::updateInvite');
+$router->post('/api/v1/classrooms/{id}/members/{memberId}/approve', 'SubjectClassroomController::approve');
+$router->post('/api/v1/classrooms/{id}/members/{memberId}/decline', 'SubjectClassroomController::decline');
+$router->post('/api/v1/classrooms/{id}/members/{memberId}/remove',  'SubjectClassroomController::removeMember');
+$router->get ('/api/v1/classrooms/{id}/live-sessions',       'ClassroomMeetingController::sessions');
+$router->post('/api/v1/classrooms/{id}/live-sessions/start', 'ClassroomMeetingController::start');
+$router->post('/api/v1/classroom-sessions/{id}/join',        'ClassroomMeetingController::join');
+$router->post('/api/v1/classroom-sessions/{id}/end',         'ClassroomMeetingController::end');
+$router->post('/api/v1/classrooms/{id}/leave',               'SubjectClassroomController::leave');
+$router->post('/api/v1/classrooms/{id}/archive',             'SubjectClassroomController::archive');
+$router->post('/api/v1/classrooms/{id}/restore',             'SubjectClassroomController::restore');
+$router->get ('/api/v1/classrooms/{id}',                     'SubjectClassroomController::detail');
+$router->patch('/api/v1/classrooms/{id}',                    'SubjectClassroomController::update');
+
 // ---- assessment + path ----
 $router->get ('/api/v1/assessments/placement',        'LearningController::placement');
 $router->post('/api/v1/assessments/placement/submit', 'LearningController::placement_submit');
@@ -81,6 +107,9 @@ $router->get ('/api/v1/sessions',              'MetaController::sessions');
 $router->post('/api/v1/sessions',              'MetaController::session_create');
 $router->get ('/api/v1/notifications',         'MetaController::notifications');
 $router->patch('/api/v1/notifications',        'MetaController::notifications_read');
+$router->get ('/api/v1/notifications/preferences', 'NotificationController::preferences');
+$router->patch('/api/v1/notifications/preferences', 'NotificationController::updatePreferences');
+$router->post('/api/v1/internal/notification-email-worker', 'NotificationController::processEmailQueue');
 
 // ---- commerce / storage ----
 $router->post('/api/v1/payments/checkout',     'MetaController::checkout');
@@ -95,3 +124,8 @@ $router->get ('/api/v1/admin/users',           'AdminController::users');
 $router->patch('/api/v1/admin/users',          'AdminController::update_user');
 $router->get ('/api/v1/admin/ai-tutor',        'AdminController::ai_tutor');
 $router->patch('/api/v1/admin/ai-tutor',      'AdminController::update_ai_tutor');
+$router->get ('/api/v1/admin/notification-email-stats', 'NotificationController::adminEmailStats');
+$router->get ('/api/v1/admin/classroom-stats', 'ClassroomMeetingController::adminStats');
+$router->get ('/api/v1/admin/classroom-settings', 'ClassroomMeetingController::adminSettings');
+$router->patch('/api/v1/admin/classroom-settings', 'ClassroomMeetingController::updateAdminSettings');
+$router->patch('/api/v1/admin/classrooms/{id}', 'ClassroomMeetingController::adminUpdateClassroom');

@@ -1,4 +1,12 @@
 # Deploy this blueprint from the root of the backend repository.
+envVarGroups:
+  - name: edusphere-notification-worker
+    envVars:
+      - key: EMAIL_WORKER_TOKEN
+        generateValue: true
+      - key: API_BASE_URL
+        value: https://edusphere-api.onrender.com
+
 services:
   - type: web
     name: edusphere-api
@@ -10,6 +18,7 @@ services:
       mountPath: /var/www/html/.data
       sizeGB: 1
     envVars:
+      - fromGroup: edusphere-notification-worker
       - key: APP_ENV
         value: production
       - key: ALLOWED_ORIGINS
@@ -33,6 +42,14 @@ services:
       - key: DB_SSL_CA
         value: /etc/secrets/aiven-ca.pem
       - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        value: https://edusphere-api.onrender.com/api/v1/classrooms/google/callback
+      - key: GOOGLE_TOKEN_ENCRYPTION_KEY
         sync: false
       - key: GEMINI_API_KEY
         sync: false
@@ -62,3 +79,12 @@ services:
         value: EduSphere
       - key: JUDGE0_URL
         sync: false
+  - type: cron
+    name: edusphere-notification-email-worker
+    runtime: docker
+    plan: starter
+    schedule: "*/1 * * * *"
+    dockerCommand: >-
+      sh -c 'curl --fail --silent --show-error --max-time 50 -X POST -H "Authorization: Bearer $EMAIL_WORKER_TOKEN" "$API_BASE_URL/api/v1/internal/notification-email-worker"'
+    envVars:
+      - fromGroup: edusphere-notification-worker
