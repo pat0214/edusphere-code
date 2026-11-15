@@ -76,8 +76,9 @@ The LavaLust API covers account registration and email verification, existing-ac
 
 Set `ALLOWED_ORIGINS` to the exact deployed frontend origin(s). The API uses bearer access tokens and the standard JSON response envelope. PHP uploads must allow 25 MB files (`upload_max_filesize=25M`, `post_max_size=26M`); the frontend's local `npm run dev` command applies these PHP CLI limits automatically.
 
-## Testing (3 canonical flows)
+## Testing (4 canonical flows)
 
 1. **Placement → path**: `POST /api/v1/auth/register` → `GET /api/v1/assessments/placement` → `POST /api/v1/assessments/placement/submit` → `GET /api/v1/learning-path`. Submitting re-sequences items by skill gap; response includes `skillGaps` and earned badges.
-2. **Code → results**: configure a private `JUDGE0_URL`, then `POST /api/v1/playground/run` with Two Sum. Exercise tests run through Judge0. Free runs send source and stdin for JavaScript (63), Python (71), C (50), C++ (54), or C# (51), and award no XP. This API intentionally has no local host-process execution fallback.
-3. **Assignment → anonymous review**: `POST /api/v1/submissions` (kind=assignment) assigns 3 least-loaded reviewers (never self, never dupes). Reviewer: `GET /api/v1/peer-review/queue` (aliases only) → `POST /api/v1/peer-review/submit`. Author: `GET /api/v1/peer-review/feedback` (reviewer aliases, never IDs).
+2. **Path progression**: complete every lesson in the active course path, then return to `/path`. The completed course is skipped and the next published course is generated in level order (beginner, intermediate, advanced); when none remain, the path page offers the course catalog.
+3. **Code → results**: configure a private `JUDGE0_URL`, then `POST /api/v1/playground/run` with Two Sum. Exercise tests run through Judge0. Free runs send source and stdin for JavaScript (63), Python (71), C (50), C++ (54), or C# (51), and award no XP. This API intentionally has no local host-process execution fallback.
+4. **Assignment → anonymous review**: `POST /api/v1/submissions` (kind=assignment) assigns 3 least-loaded reviewers (never self, never dupes). Reviewer: `GET /api/v1/peer-review/queue` (aliases only) → `POST /api/v1/peer-review/submit`. Author: `GET /api/v1/peer-review/feedback` (reviewer aliases, never IDs).

@@ -151,6 +151,17 @@ class LearningController extends MY_Controller
         $user = require_role($this->users, ['student']);
         $existing = $this->paths_model->activeFor($user['id']);
         $result = $this->paths->generate($user['id'], (bool)$existing);
+        if (!$result['path_id']) {
+            respond([
+                'path' => null,
+                'items' => [],
+                'course' => null,
+                'questions' => [],
+                'allCoursesComplete' => $result['all_courses_complete'],
+            ], $result['all_courses_complete']
+                ? 'You have completed all currently published courses.'
+                : 'No published courses are available for a learning path yet.');
+        }
         $badge = $result['created'] ? $this->gamify->award($user['id'], 'pathfinder') : null;
         $path = $this->paths_model->byId($result['path_id']);
         respond($this->pathPayload($path) + ['badge' => $badge], $existing ? 'Path regenerated around your latest scores.' : 'Your path is ready.');

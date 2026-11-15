@@ -22,6 +22,35 @@ class Path_model extends Model
             ->get();
     }
 
+    public function completedCourseIds($userId): array
+    {
+        return $this->db->raw(
+            "SELECT DISTINCT course_id FROM learning_paths WHERE user_id = ? AND status = 'completed'",
+            [$userId]
+        )->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    public function nextPublishedCourseForUser($userId)
+    {
+        return $this->db->raw(
+            "SELECT c.*
+             FROM courses c
+             WHERE c.published = 1
+               AND NOT EXISTS (
+                 SELECT 1 FROM learning_paths lp
+                 WHERE lp.user_id = ? AND lp.course_id = c.id AND lp.status = 'completed'
+               )
+             ORDER BY CASE LOWER(c.level)
+                 WHEN 'beginner' THEN 1
+                 WHEN 'intermediate' THEN 2
+                 WHEN 'advanced' THEN 3
+                 ELSE 4
+             END, c.created_at, c.title
+             LIMIT 1",
+            [$userId]
+        )->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
     public function byId($id)
     {
         return $this->db->table('learning_paths')->where('id', $id)->limit(1)->get();

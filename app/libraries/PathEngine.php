@@ -23,10 +23,21 @@ class PathEngine
             return ['path_id' => $existing['id'], 'created' => false];
         }
 
+        $completedCourseIds = $existing ? [] : $this->paths->completedCourseIds($userId);
         $course = $existing
             ? $this->content->courseById($existing['course_id'])
-            : $this->content->courseBySlug('js-foundations');
+            : ($completedCourseIds
+                ? $this->paths->nextPublishedCourseForUser($userId)
+                : ($this->content->courseBySlug('js-foundations')
+                    ?: $this->paths->nextPublishedCourseForUser($userId)));
         if (!$course) {
+            if (!$existing) {
+                return [
+                    'path_id' => null,
+                    'created' => false,
+                    'all_courses_complete' => (bool)$completedCourseIds,
+                ];
+            }
             fail_api('No course available to build a path from.', 500);
         }
 
