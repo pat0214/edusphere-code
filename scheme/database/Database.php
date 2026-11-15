@@ -409,6 +409,7 @@ class Database {
             }
             return $stmt;
         } catch (Exception $e) {
+            error_log('[database] query failed: ' . $e->getMessage() . ' SQL: ' . ($this->get_sql ?? ''));
             $error = load_class('Errors', 'kernel');
             $error->show_database_error(
                 $e->getMessage(),

@@ -17,6 +17,9 @@ class AiTutorController extends MY_Controller
     public function credits()
     {
         $user = require_role($this->users, ['student']);
+        if (!$this->tutor->schemaReady()) {
+            fail_api('AI Tutor database migration is missing or incomplete. Apply database/migrations/007_ai_tutor.sql, then retry.', 503);
+        }
         $settings = $this->tutor->settings();
         respond([
             'enabled' => $settings['enabled'],
@@ -28,6 +31,9 @@ class AiTutorController extends MY_Controller
     public function chat()
     {
         $user = require_role($this->users, ['student']);
+        if (!$this->tutor->schemaReady()) {
+            fail_api('AI Tutor database migration is missing or incomplete. Apply database/migrations/007_ai_tutor.sql, then retry.', 503);
+        }
         $settings = $this->tutor->settings();
         if (!$settings['enabled']) fail_api('The AI Learning Assistant is currently disabled by an administrator.', 503);
         if (!GeminiPathCoach::configured()) fail_api('The AI Learning Assistant is not configured on the server.', 503);

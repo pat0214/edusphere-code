@@ -60,6 +60,10 @@ The Docker build uses the LavaLust framework already present in this directory; 
 
 When `DB_SSL_CA` points to Aiven's CA certificate, the LavaLust PDO connection verifies the server certificate. This setting is conditional and does not enable TLS options for local databases that do not provide a CA path. Do not remove the CA setting to bypass certificate validation for a remote database. Local `certs/*.pem` files are gitignored; for Render, upload the CA as a Secret File named `aiven-ca.pem` on the API service. Render exposes it at `/etc/secrets/aiven-ca.pem`, which is the path configured by `render.yaml`.
 
+## Recovering an incomplete AI Tutor migration
+
+Migration `database/migrations/007_ai_tutor.sql` is safe to rerun. If `/api/v1/health` reports `aiTutorSchema: "migration_required"`, run the full migration again against the database named by the Render API's `DB_NAME`. The dashboard remains available while those tables are missing; the AI Tutor returns a specific migration message until the schema is ready.
+
 ## Render deploy
 
 `render.yaml` is a blueprint for one Docker web service. The Dockerfile builds this complete LavaLust project, enables `mod_rewrite` for LavaLust's `public/index.php`, installs `pdo_mysql`, and honors Render's `PORT`. The image creates group `1000` if needed and adds Apache's `www-data` user to it so it can read Render Docker Secret Files. The blueprint also provisions a persistent disk for uploaded course materials and defaults `APP_URL` and `ALLOWED_ORIGINS` to `https://edusphere-front.onrender.com`. If the frontend uses a different URL, update both values in the Render service dashboard. Upload the Aiven CA as a Render Secret File named `aiven-ca.pem`; set the DB environment variables in the service dashboard. Health check: `/api/v1/health`.

@@ -33,6 +33,16 @@ class AiTutor_model extends Model
         ];
     }
 
+    public function schemaReady(): bool
+    {
+        $count = $this->db->raw(
+            'SELECT COUNT(*) FROM information_schema.tables
+             WHERE table_schema = DATABASE() AND table_name IN (?, ?, ?)',
+            ['ai_tutor_settings', 'ai_tutor_daily_credits', 'ai_tutor_usage']
+        )->fetchColumn();
+        return (int)$count === 3;
+    }
+
     public function updateSettings(array $values): void
     {
         $this->db->raw(

@@ -27,7 +27,13 @@ class AuthController extends MY_Controller
     {
         try {
             $this->auth->databaseAvailable();
-            respond(['service' => 'edusphere', 'version' => 'v1', 'db' => 'up'], 'Healthy.');
+            $tutor = $this->call->model('AiTutor_model');
+            respond([
+                'service' => 'edusphere',
+                'version' => 'v1',
+                'db' => 'up',
+                'aiTutorSchema' => $tutor->schemaReady() ? 'ready' : 'migration_required',
+            ], 'Healthy.');
         } catch (Throwable $e) {
             fail_api('Database unreachable.', 503);
         }

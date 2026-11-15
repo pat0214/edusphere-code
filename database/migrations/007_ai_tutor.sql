@@ -1,4 +1,4 @@
-CREATE TABLE ai_tutor_settings (
+CREATE TABLE IF NOT EXISTS ai_tutor_settings (
   id TINYINT PRIMARY KEY,
   enabled TINYINT(1) NOT NULL DEFAULT 1,
   daily_credits INT NOT NULL DEFAULT 5,
@@ -13,13 +13,13 @@ CREATE TABLE ai_tutor_settings (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
-INSERT INTO ai_tutor_settings (id) VALUES (1);
+INSERT IGNORE INTO ai_tutor_settings (id) VALUES (1);
 
-INSERT INTO badges (id, code, name, description, icon, accent, xp_reward) VALUES
+INSERT IGNORE INTO badges (id, code, name, description, icon, accent, xp_reward) VALUES
   ('b-indsolver','independent-solver','Independent Solver','Completed an exercise without using the AI assistant first.','target','mint',25),
   ('b-thinker','critical-thinker','Critical Thinker','Solved an exercise after using hints without requesting a complete solution.','brain','indigo',30);
 
-CREATE TABLE ai_tutor_daily_credits (
+CREATE TABLE IF NOT EXISTS ai_tutor_daily_credits (
   user_id CHAR(36) NOT NULL,
   credit_date DATE NOT NULL,
   credits_used INT NOT NULL DEFAULT 0,
@@ -27,7 +27,7 @@ CREATE TABLE ai_tutor_daily_credits (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
-CREATE TABLE ai_tutor_usage (
+CREATE TABLE IF NOT EXISTS ai_tutor_usage (
   id CHAR(36) PRIMARY KEY,
   user_id CHAR(36) NOT NULL,
   exercise_id CHAR(36) NULL,

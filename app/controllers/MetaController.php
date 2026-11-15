@@ -28,7 +28,7 @@ class MetaController extends MY_Controller
             'streak' => ['current' => (int)($streak['current'] ?? 0), 'longest' => (int)($streak['longest'] ?? 0)],
             'velocity' => $this->meta->activePathVelocity($user['id']),
             'activity' => $this->meta->activitySeries($user['id']),
-            'aiTutor' => $this->tutor->studentAnalytics($user['id']),
+            'aiTutor' => $this->tutor->schemaReady() ? $this->tutor->studentAnalytics($user['id']) : null,
         ]);
     }
 
