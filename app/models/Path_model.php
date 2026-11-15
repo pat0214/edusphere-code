@@ -25,9 +25,54 @@ class Path_model extends Model
     public function completedCourseIds($userId): array
     {
         return $this->db->raw(
-            "SELECT DISTINCT course_id FROM learning_paths WHERE user_id = ? AND status = 'completed'",
-            [$userId]
+            "SELECT DISTINCT course_id
+             FROM learning_paths
+             WHERE user_id = ? AND status = 'completed'
+             UNION
+             SELECT c.id
+             FROM courses c
+             WHERE EXISTS (
+               SELECT 1 FROM lessons l JOIN modules m ON m.id = l.module_id
+               WHERE m.course_id = c.id
+             )
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM lessons l JOIN modules m ON m.id = l.module_id
+                 WHERE m.course_id = c.id
+                   AND NOT EXISTS (
+                     SELECT 1 FROM progress_records pr
+                     WHERE pr.user_id = ? AND pr.lesson_id = l.id
+                   )
+               )",
+            [$userId, $userId]
         )->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    public function completeActivePathsFromLessonProgress($userId): void
+    {
+        $this->db->raw(
+            "UPDATE learning_paths lp
+             SET status = 'completed', completed_at = COALESCE(completed_at, NOW())
+             WHERE lp.user_id = ? AND lp.status = 'active'
+               AND EXISTS (
+                 SELECT 1 FROM lessons l JOIN modules m ON m.id = l.module_id
+                 WHERE m.course_id = lp.course_id
+               )
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM lessons l JOIN modules m ON m.id = l.module_id
+                 WHERE m.course_id = lp.course_id
+                   AND NOT EXISTS (
+                     SELECT 1 FROM progress_records pr
+                     WHERE pr.user_id = lp.user_id AND pr.lesson_id = l.id
+                   )
+                   AND NOT EXISTS (
+                     SELECT 1 FROM learning_path_items pi
+                     WHERE pi.path_id = lp.id AND pi.lesson_id = l.id AND pi.status = 'done'
+                   )
+               )",
+            [$userId]
+        );
     }
 
     public function nextPublishedCourseForUser($userId)
@@ -40,6 +85,15 @@ class Path_model extends Model
                  SELECT 1 FROM learning_paths lp
                  WHERE lp.user_id = ? AND lp.course_id = c.id AND lp.status = 'completed'
                )
+               AND EXISTS (
+                 SELECT 1
+                 FROM lessons l JOIN modules m ON m.id = l.module_id
+                 WHERE m.course_id = c.id
+                   AND NOT EXISTS (
+                     SELECT 1 FROM progress_records pr
+                     WHERE pr.user_id = ? AND pr.lesson_id = l.id
+                   )
+               )
              ORDER BY CASE LOWER(c.level)
                  WHEN 'beginner' THEN 1
                  WHEN 'intermediate' THEN 2
@@ -47,7 +101,7 @@ class Path_model extends Model
                  ELSE 4
              END, c.created_at, c.title
              LIMIT 1",
-            [$userId]
+            [$userId, $userId]
         )->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
