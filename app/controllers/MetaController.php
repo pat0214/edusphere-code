@@ -5,6 +5,7 @@ class MetaController extends MY_Controller
     private $users;
     private $meta;
     private $auth;
+    private $tutor;
 
     public function __construct()
     {
@@ -13,6 +14,7 @@ class MetaController extends MY_Controller
         $this->users = $this->call->model('User_model');
         $this->meta = $this->call->model('Meta_model');
         $this->auth = $this->call->model('Auth_model');
+        $this->tutor = $this->call->model('AiTutor_model');
     }
 
     // ---------- analytics ----------
@@ -26,6 +28,7 @@ class MetaController extends MY_Controller
             'streak' => ['current' => (int)($streak['current'] ?? 0), 'longest' => (int)($streak['longest'] ?? 0)],
             'velocity' => $this->meta->activePathVelocity($user['id']),
             'activity' => $this->meta->activitySeries($user['id']),
+            'aiTutor' => $this->tutor->studentAnalytics($user['id']),
         ]);
     }
 

@@ -55,6 +55,8 @@ $router->post('/api/v1/learning-path/progress',       'LearningController::path_
 // ---- playground ----
 $router->get ('/api/v1/exercises',             'LabController::exercises');
 $router->post('/api/v1/playground/run',        'LabController::run');
+$router->get ('/api/v1/ai-tutor/credits',       'AiTutorController::credits');
+$router->post('/api/v1/ai-tutor/chat',          'AiTutorController::chat');
 
 // ---- submissions + peer review ----
 $router->get ('/api/v1/submissions',           'LabController::submissions');
@@ -91,3 +93,5 @@ $router->post('/api/v1/uploads/presign',       'MetaController::presign');
 $router->get ('/api/v1/admin/analytics',       'AdminController::analytics');
 $router->get ('/api/v1/admin/users',           'AdminController::users');
 $router->patch('/api/v1/admin/users',          'AdminController::update_user');
+$router->get ('/api/v1/admin/ai-tutor',        'AdminController::ai_tutor');
+$router->patch('/api/v1/admin/ai-tutor',      'AdminController::update_ai_tutor');

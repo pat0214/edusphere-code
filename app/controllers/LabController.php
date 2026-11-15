@@ -11,6 +11,7 @@ class LabController extends MY_Controller
     private $assigner;
     private $classroom;
     private $certificates;
+    private $aiTutor;
 
     public function __construct()
     {
@@ -29,6 +30,7 @@ class LabController extends MY_Controller
         ]);
         $this->assessments = $this->call->model('Assessment_model');
         $this->reviews = $this->call->model('Review_model');
+        $this->aiTutor = $this->call->model('AiTutor_model');
         $this->assigner = $this->call->library('PeerAssigner', [$this->reviews, $this->gamify]);
     }
 
@@ -183,7 +185,16 @@ class LabController extends MY_Controller
         if ($result['passed_count'] === $result['total_count'] && $priorBest < $result['total_count']) {
             $xpGained += 20;
             $b = $this->gamify->award($userId, 'bug-hunter');
-            if ($b) $badges[] = $b;
+            if ($b) $badges[] = $this->badgeForClient($b);
+            $eligibility = $this->aiTutor->exerciseAchievementEligibility($userId, $exercise['id'], $execId);
+            if ($eligibility['independent']) {
+                $b = $this->gamify->award($userId, 'independent-solver');
+                if ($b) $badges[] = $this->badgeForClient($b);
+            }
+            if ($eligibility['criticalThinker']) {
+                $b = $this->gamify->award($userId, 'critical-thinker');
+                if ($b) $badges[] = $this->badgeForClient($b);
+            }
         }
         if ($xpGained > 0) $this->gamify->addXp($userId, $xpGained);
         $this->gamify->touchStreak($userId);
@@ -192,6 +203,18 @@ class LabController extends MY_Controller
                 (int)round($result['passed_count'] / $result['total_count'] * 100));
         }
         return [$xpGained, $badges];
+    }
+
+    private function badgeForClient(array $badge): array
+    {
+        return [
+            'code' => $badge['code'],
+            'name' => $badge['name'],
+            'description' => $badge['description'],
+            'icon' => $badge['icon'],
+            'accent' => $badge['accent'],
+            'xpReward' => (int)$badge['xp_reward'],
+        ];
     }
 
     // ---------- submissions ----------

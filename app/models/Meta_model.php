@@ -43,6 +43,7 @@ class Meta_model extends Model
             'path' => ['done' => (int)$path['done'], 'total' => (int)$path['total']],
             'runs' => (int)$this->db->table('execution_results')->where('user_id', $user['id'])->count(),
             'badgesCount' => (int)$this->db->table('user_badges')->where('user_id', $user['id'])->count(),
+            'badgesTotal' => (int)$this->db->table('badges')->count(),
             'reviewsGiven' => (int)$this->db->table('peer_assignments')
                 ->where(['reviewer_id' => $user['id'], 'status' => 'submitted'])
                 ->count(),
@@ -81,6 +82,8 @@ class Meta_model extends Model
                         (SELECT COUNT(*) FROM progress_records pr WHERE pr.user_id = u.id) lessons,
                         (SELECT COUNT(*) FROM peer_assignments pa WHERE pa.reviewer_id = u.id AND pa.status = 'submitted') reviews_done,
                         (SELECT COUNT(*) FROM peer_assignments pa WHERE pa.reviewer_id = u.id AND pa.status = 'pending') reviews_pending,
+                        (SELECT COUNT(*) FROM ai_tutor_usage atu WHERE atu.user_id = u.id AND atu.status = 'succeeded') aiRequests,
+                        COALESCE((SELECT SUM(atu.credits) FROM ai_tutor_usage atu WHERE atu.user_id = u.id AND atu.status = 'succeeded'), 0) aiCredits,
                         COALESCE((SELECT s.current FROM streaks s WHERE s.user_id = u.id), 0) streak,
                         (SELECT ROUND(AVG(m.score)) FROM (
                             SELECT sc.skill_id, sc.score FROM student_skill_scores sc
