@@ -5,6 +5,7 @@ class AiTutorController extends MY_Controller
 {
     private $users;
     private $tutor;
+    private $meta;
 
     public function __construct()
     {
@@ -12,11 +13,13 @@ class AiTutorController extends MY_Controller
         $this->call->library('Clients');
         $this->users = $this->call->model('User_model');
         $this->tutor = $this->call->model('AiTutor_model');
+        $this->meta = $this->call->model('Meta_model');
     }
 
     public function credits()
     {
         $user = require_role($this->users, ['student']);
+        $this->requireAssistantSubscription($user['id']);
         if (!$this->tutor->schemaReady()) {
             fail_api('AI Tutor database migration is missing or incomplete. Apply database/migrations/007_ai_tutor.sql, then retry.', 503);
         }
@@ -31,6 +34,7 @@ class AiTutorController extends MY_Controller
     public function chat()
     {
         $user = require_role($this->users, ['student']);
+        $this->requireAssistantSubscription($user['id']);
         if (!$this->tutor->schemaReady()) {
             fail_api('AI Tutor database migration is missing or incomplete. Apply database/migrations/007_ai_tutor.sql, then retry.', 503);
         }
@@ -156,6 +160,13 @@ class AiTutorController extends MY_Controller
             'duplicate' => false,
             'hintLevel' => $hintLevel,
         ]);
+    }
+
+    private function requireAssistantSubscription(string $userId): void
+    {
+        if (!$this->meta->hasActiveAssistantSubscription($userId)) {
+            fail_api('The AI Learning Assistant is available only with an active Pro or Team subscription.', 403);
+        }
     }
 
     private function cleanHistory($raw): array
