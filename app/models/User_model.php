@@ -25,6 +25,14 @@ class User_model extends Model
         return $this->db->table('users')->where('id', $id)->limit(1)->get();
     }
 
+    public function instructorSubjectSchemaReady(): bool
+    {
+        return (int)$this->db->raw(
+            "SELECT COUNT(*) FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = 'users' AND column_name = 'subject'"
+        )->fetchColumn() === 1;
+    }
+
     public function activeVerifiedById($id)
     {
         return $this->db->table('users')
@@ -48,6 +56,15 @@ class User_model extends Model
             "INSERT INTO users (id, name, email, password_hash, role, xp, level, active, email_verified, created_at, updated_at)
              VALUES (?, ?, ?, ?, 'student', 0, 1, 1, 1, NOW(), NOW())",
             [$id, $name, $email, $hash]
+        );
+    }
+
+    public function createInstructor($id, $name, $email, $hash, $subject): void
+    {
+        $this->db->raw(
+            "INSERT INTO users (id, name, email, password_hash, role, xp, level, active, email_verified, subject, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 'instructor', 0, 1, 1, 1, ?, NOW(), NOW())",
+            [$id, $name, $email, $hash, $subject]
         );
     }
 
@@ -137,11 +154,11 @@ class User_model extends Model
         $this->db->raw('UPDATE users SET active = ?, updated_at = NOW() WHERE id = ?', [$active ? 1 : 0, $id]);
     }
 
-    public function updateProfile($id, $bio, $avatar)
+    public function updateProfile($id, $bio, $avatar, ?string $subject = null)
     {
-        $this->db->table('users')
-            ->where('id', $id)
-            ->update(['bio' => $bio, 'avatar' => $avatar]);
+        $updates = ['bio' => $bio, 'avatar' => $avatar];
+        if ($subject !== null) $updates['subject'] = $subject;
+        $this->db->table('users')->where('id', $id)->update($updates);
 
         return $this->byId($id);
     }

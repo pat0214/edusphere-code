@@ -234,6 +234,13 @@ class AuthController extends MY_Controller
         $user = auth_user($this->users);
         $b = json_body();
         $bio = trim((string)($b['bio'] ?? ''));
+        $subject = null;
+        if ($user['role'] === 'instructor' && array_key_exists('subject', $b)) {
+            if (!is_string($b['subject'])) fail_api('Teaching subject must be text.', 422, ['subject' => 'Enter a valid subject.']);
+            if (!$this->users->instructorSubjectSchemaReady()) fail_api('Run database migration 011_instructor_subject_courses.sql before updating instructor subjects.', 503);
+            $subject = trim($b['subject']);
+            if (mb_strlen($subject) > 160) fail_api('Teaching subject must be 160 characters or fewer.', 422, ['subject' => 'Teaching subject must be 160 characters or fewer.']);
+        }
         $avatar = (string)($b['avatar'] ?? '');
         if (mb_strlen($bio) > 180) fail_api('Bio must be 180 characters or fewer.', 422, ['bio' => 'Bio must be 180 characters or fewer.']);
         $valid_avatar = str_starts_with($avatar, 'data:image/svg+xml;charset=utf-8,')
@@ -241,7 +248,7 @@ class AuthController extends MY_Controller
         if (strlen($avatar) > 14000000 || !$valid_avatar) {
             fail_api('Upload a PNG, JPEG, WEBP, or GIF image 10 MB or smaller.', 422, ['avatar' => 'Invalid image or larger than 10 MB.']);
         }
-        $updated = $this->users->updateProfile($user['id'], $bio, $avatar);
+        $updated = $this->users->updateProfile($user['id'], $bio, $avatar, $subject);
         respond(['user' => public_user($updated)], 'Profile saved.');
     }
 

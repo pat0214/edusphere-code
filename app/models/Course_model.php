@@ -55,6 +55,36 @@ class Course_model extends Model
         return ['id' => $id, 'slug' => $slug];
     }
 
+    public function courseForInstructorSubject($instructorId, $subject): array
+    {
+        $this->db->transaction();
+        try {
+            $course = $this->courseForInstructorSubjectInTransaction($instructorId, $subject);
+            $this->db->commit();
+            return $course;
+        } catch (Throwable $error) {
+            $this->db->roll_back();
+            throw $error;
+        }
+    }
+
+    public function courseForInstructorSubjectInTransaction($instructorId, $subject): array
+    {
+        $this->db->raw('SELECT id FROM users WHERE id = ? FOR UPDATE', [$instructorId])->fetch(PDO::FETCH_ASSOC);
+        $existing = $this->db->raw(
+            'SELECT id, slug FROM courses WHERE instructor_id = ? AND title = ? LIMIT 1',
+            [$instructorId, $subject]
+        )->fetch(PDO::FETCH_ASSOC);
+        if ($existing) return ['id' => $existing['id'], 'slug' => $existing['slug']];
+
+        return $this->createCourse(
+            $instructorId,
+            $subject,
+            "Course materials and coding assignments for $subject.",
+            'beginner'
+        );
+    }
+
     public function courseOwner($courseId, $instructorId): bool
     {
         return (bool)$this->db->raw(

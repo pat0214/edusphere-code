@@ -27,6 +27,46 @@ class AdminController extends MY_Controller
         respond($this->users->adminLists());
     }
 
+    public function create_instructor()
+    {
+        require_role($this->users, ['admin']);
+        if (!$this->users->instructorSubjectSchemaReady()) {
+            fail_api('Run database migration 011_instructor_subject_courses.sql before creating instructors.', 503);
+        }
+
+        $body = json_body();
+        $name = trim((string)($body['name'] ?? ''));
+        $email = strtolower(trim((string)($body['email'] ?? '')));
+        $password = (string)($body['password'] ?? '');
+        $subject = trim((string)($body['subject'] ?? ''));
+
+        if (mb_strlen($name) < 2 || mb_strlen($name) > 100) {
+            fail_api('Name must be between 2 and 100 characters.', 422, ['name' => 'Enter a name between 2 and 100 characters.']);
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 190) {
+            fail_api('Enter a valid email address.', 422, ['email' => 'Enter a valid email address.']);
+        }
+        if (strlen($password) < 8 || strlen($password) > 72) {
+            fail_api('Initial password must be between 8 and 72 characters.', 422, ['password' => 'Use 8 to 72 characters.']);
+        }
+        if (mb_strlen($subject) < 1 || mb_strlen($subject) > 160) {
+            fail_api('Teaching subject must be between 1 and 160 characters.', 422, ['subject' => 'Enter a subject up to 160 characters.']);
+        }
+        if ($this->users->byEmail($email)) {
+            fail_api('An account with this email already exists.', 409, ['email' => 'Already registered.']);
+        }
+
+        $id = uuid4();
+        $this->users->createInstructor($id, $name, $email, password_hash($password, PASSWORD_BCRYPT), $subject);
+        respond([
+            'id' => $id,
+            'name' => $name,
+            'email' => $email,
+            'role' => 'instructor',
+            'subject' => $subject,
+        ], 'Instructor account created. Share the initial password securely.', 201);
+    }
+
     public function update_user()
     {
         $admin = require_role($this->users, ['admin']);

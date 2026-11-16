@@ -122,6 +122,7 @@ $router->post('/api/v1/uploads/presign',       'MetaController::presign');
 // ---- admin ----
 $router->get ('/api/v1/admin/analytics',       'AdminController::analytics');
 $router->get ('/api/v1/admin/users',           'AdminController::users');
+$router->post('/api/v1/admin/instructors',      'AdminController::create_instructor');
 $router->patch('/api/v1/admin/users',          'AdminController::update_user');
 $router->get ('/api/v1/admin/ai-tutor',        'AdminController::ai_tutor');
 $router->patch('/api/v1/admin/ai-tutor',      'AdminController::update_ai_tutor');

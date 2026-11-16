@@ -114,6 +114,7 @@ function public_user(array $u)
         'level' => (int)$u['level'],
         'avatar' => $u['avatar'] ?? null,
         'bio' => $u['bio'] ?? 'Building momentum, one lesson at a time.',
+        'subject' => $u['subject'] ?? '',
     ];
 }
 
