@@ -64,9 +64,9 @@ class GoogleCalendarClient
         return $json;
     }
 
-    public static function createMeetEvent(string $accessToken, array $event): array
+    public static function createCalendarEvent(string $accessToken, array $event): array
     {
-        $url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all';
+        $url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all';
         [$status, $json] = self::request('POST', $url, $accessToken, $event);
         if ($status === 409 && !empty($event['id'])) {
             [$status, $json] = self::request(
@@ -80,32 +80,20 @@ class GoogleCalendarClient
         }
         return [
             'eventId' => (string)($json['id'] ?? $event['id']),
-            'meetUrl' => self::meetUrl($json),
         ];
     }
 
-    public static function deleteEvent(string $accessToken, string $eventId): void
+    public static function finishCalendarEvent(string $accessToken, string $eventId, string $endsAt): void
     {
         [$status] = self::request(
-            'DELETE',
+            'PATCH',
             'https://www.googleapis.com/calendar/v3/calendars/primary/events/' . rawurlencode($eventId) . '?sendUpdates=all',
-            $accessToken
+            $accessToken,
+            ['end' => ['dateTime' => gmdate('c', strtotime($endsAt)), 'timeZone' => 'UTC']]
         );
         if ($status < 200 || $status >= 300) {
-            throw new RuntimeException('Google Calendar could not cancel the classroom event (HTTP ' . $status . ').');
+            throw new RuntimeException('Google Calendar could not update the classroom event (HTTP ' . $status . ').');
         }
-    }
-
-    private static function meetUrl(array $event): ?string
-    {
-        $candidates = [$event['hangoutLink'] ?? null];
-        foreach (($event['conferenceData']['entryPoints'] ?? []) as $entry) {
-            if (($entry['entryPointType'] ?? '') === 'video') $candidates[] = $entry['uri'] ?? null;
-        }
-        foreach ($candidates as $candidate) {
-            if (is_string($candidate) && preg_match('~^https://meet\.google\.com/[a-z0-9-]+(?:\?.*)?$~i', $candidate)) return $candidate;
-        }
-        return null;
     }
 
     private static function form(string $url, array $values): array

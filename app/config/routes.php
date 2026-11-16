@@ -63,6 +63,7 @@ $router->post('/api/v1/classrooms/{id}/members/{memberId}/remove',  'SubjectClas
 $router->get ('/api/v1/classrooms/{id}/live-sessions',       'ClassroomMeetingController::sessions');
 $router->post('/api/v1/classrooms/{id}/live-sessions/start', 'ClassroomMeetingController::start');
 $router->post('/api/v1/classroom-sessions/{id}/join',        'ClassroomMeetingController::join');
+$router->post('/api/v1/classroom-sessions/{id}/leave',       'ClassroomMeetingController::leave');
 $router->post('/api/v1/classroom-sessions/{id}/end',         'ClassroomMeetingController::end');
 $router->post('/api/v1/classrooms/{id}/leave',               'SubjectClassroomController::leave');
 $router->post('/api/v1/classrooms/{id}/archive',             'SubjectClassroomController::archive');

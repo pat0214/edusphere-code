@@ -23,9 +23,9 @@
 
 ## 3. Apply application migrations
 
-Run each migration required by the deployed version against that exact selected database. For current EduSphere features, apply `database/migrations/005_paymongo_one_time_payments.sql`, `006_module_quizzes.sql`, `007_ai_tutor.sql`, and `008_classrooms.sql` if they have not already been applied. Migration `008_classrooms.sql` creates the subject classroom, membership/invitation, live-session, encrypted Google connection, notification preference, and email queue tables. It is safe to rerun.
+Run each migration required by the deployed version against that exact selected database. For current EduSphere features, apply `database/migrations/005_paymongo_one_time_payments.sql`, `006_module_quizzes.sql`, `007_ai_tutor.sql`, `008_classrooms.sql`, and `009_jitsi_live_sessions.sql` if they have not already been applied. Migration 008 creates the subject classroom, membership/invitation, Google connection, notification preference, and email queue tables. Migration 009 adds Jitsi provider settings and per-session random room metadata; both migrations are safe to rerun.
 
-After deploying the API, check `/api/v1/health`. It should show `db: "up"`, `classroomSchema: "ready"`, and `notificationEmailSchema: "ready"`. If either schema status says `migration_required`, confirm Render's `DB_NAME` and rerun the corresponding migration in that database.
+After deploying the API, check `/api/v1/health`. It should show `db: "up"`, `classroomSchema: "ready"`, `jitsiSchema: "ready"`, and `notificationEmailSchema: "ready"`. If a schema status says `migration_required`, confirm Render's `DB_NAME` and run the corresponding migration in that database.
 
 ## 4. Backup and restore
 

@@ -51,6 +51,16 @@ services:
         value: https://edusphere-api.onrender.com/api/v1/classrooms/google/callback
       - key: GOOGLE_TOKEN_ENCRYPTION_KEY
         sync: false
+      - key: JAAS_APP_ID
+        sync: false
+      - key: JAAS_API_KEY_ID
+        sync: false
+      - key: JAAS_PRIVATE_KEY
+        sync: false
+      - key: JITSI_JWT_APP_ID
+        sync: false
+      - key: JITSI_JWT_SECRET
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL

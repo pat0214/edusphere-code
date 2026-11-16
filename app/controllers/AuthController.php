@@ -37,6 +37,7 @@ class AuthController extends MY_Controller
                 'db' => 'up',
                 'aiTutorSchema' => $tutor->schemaReady() ? 'ready' : 'migration_required',
                 'classroomSchema' => $classrooms->schemaReady() && $meetings->schemaReady() ? 'ready' : 'migration_required',
+                'jitsiSchema' => $meetings->jitsiSchemaReady() ? 'ready' : 'migration_required',
                 'notificationEmailSchema' => $gamify->emailQueueSchemaReady() ? 'ready' : 'migration_required',
                 'googleMeetConfigured' => (bool)(getenv('GOOGLE_OAUTH_CLIENT_ID') && getenv('GOOGLE_OAUTH_CLIENT_SECRET') && getenv('GOOGLE_OAUTH_REDIRECT_URI')) && $meetings->encryptionReady(),
             ], 'Healthy.');
