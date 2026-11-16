@@ -18,20 +18,20 @@ class Review_model extends Model
     {
         if ($forStudentIdOrNull) {
             return $this->db->raw(
-                "SELECT s.id, s.kind, s.title, s.status, s.language, s.created_at, e.title exercise,
+                "SELECT s.id, s.kind, s.title, s.status, s.language, s.created_at AS createdAt, e.title exercise,
                         (SELECT COUNT(*) FROM peer_assignments pa WHERE pa.submission_id = s.id) reviewers,
-                        (SELECT COUNT(*) FROM peer_reviews pr WHERE pr.submission_id = s.id) reviews_done,
-                        (SELECT ROUND(AVG(rs.score), 1) FROM review_scores rs JOIN peer_reviews pr2 ON pr2.id = rs.review_id WHERE pr2.submission_id = s.id) avg_score
+                        (SELECT COUNT(*) FROM peer_reviews pr WHERE pr.submission_id = s.id) reviewsDone,
+                        (SELECT ROUND(AVG(rs.score), 1) FROM review_scores rs JOIN peer_reviews pr2 ON pr2.id = rs.review_id WHERE pr2.submission_id = s.id) avgScore
                  FROM submissions s LEFT JOIN coding_exercises e ON e.id = s.exercise_id
                  WHERE s.user_id = ? ORDER BY s.created_at DESC",
                 [$forStudentIdOrNull]
             )->fetchAll(PDO::FETCH_ASSOC);
         }
         return $this->db->raw(
-            "SELECT s.id, s.kind, s.title, s.status, s.language, s.created_at, e.title exercise, u.name author, u.id author_id,
+            "SELECT s.id, s.kind, s.title, s.status, s.language, s.created_at AS createdAt, e.title exercise, u.name author, u.id author_id,
                     (SELECT COUNT(*) FROM peer_assignments pa WHERE pa.submission_id = s.id) reviewers,
-                    (SELECT COUNT(*) FROM peer_reviews pr WHERE pr.submission_id = s.id) reviews_done,
-                    (SELECT ROUND(AVG(rs.score), 1) FROM review_scores rs JOIN peer_reviews pr2 ON pr2.id = rs.review_id WHERE pr2.submission_id = s.id) avg_score
+                    (SELECT COUNT(*) FROM peer_reviews pr WHERE pr.submission_id = s.id) reviewsDone,
+                    (SELECT ROUND(AVG(rs.score), 1) FROM review_scores rs JOIN peer_reviews pr2 ON pr2.id = rs.review_id WHERE pr2.submission_id = s.id) avgScore
              FROM submissions s LEFT JOIN coding_exercises e ON e.id = s.exercise_id JOIN users u ON u.id = s.user_id
              ORDER BY s.created_at DESC"
         )->fetchAll(PDO::FETCH_ASSOC);
@@ -77,13 +77,13 @@ class Review_model extends Model
     public function reviewerCandidates($authorId, $submissionId, $limit)
     {
         return $this->db->raw(
-            "SELECT u.id, (SELECT COUNT(*) FROM peer_assignments pa WHERE pa.reviewer_id = u.id) load
+            "SELECT u.id, (SELECT COUNT(*) FROM peer_assignments pa WHERE pa.reviewer_id = u.id) AS assignment_load
              FROM users u WHERE u.role = 'student' AND u.active = 1 AND u.id != ?
                AND NOT EXISTS (
                    SELECT 1 FROM peer_assignments existing
                    WHERE existing.submission_id = ? AND existing.reviewer_id = u.id
                )
-             ORDER BY load ASC, RAND() LIMIT " . intval($limit),
+             ORDER BY assignment_load ASC, RAND() LIMIT " . intval($limit),
             [$authorId, $submissionId]
         )->fetchAll(PDO::FETCH_ASSOC);
     }
