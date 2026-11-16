@@ -227,7 +227,6 @@ class ClassroomMeetingController extends MY_Controller
         if (!is_string($rawDomain)) fail_api('Jitsi domain must be text.', 422);
         $domain = trim($rawDomain);
         if ($meetingProvider === 'public') $domain = 'meet.jit.si';
-        if ($meetingProvider === 'jaas') $domain = '8x8.vc';
         if ($meetingProvider === 'self_hosted' && !JitsiMeetingProvider::validDomain($domain)) fail_api('Enter a valid self-hosted Jitsi domain without https:// or a path.', 422);
         $values['maxStudentsPerClassroom'] = $maxStudents;
         $values['maxLiveSessionMinutes'] = $maxDuration;

@@ -1,17 +1,17 @@
 CREATE TABLE IF NOT EXISTS classroom_meeting_settings (
   id TINYINT UNSIGNED PRIMARY KEY,
-  provider ENUM('public','self_hosted','jaas') NOT NULL DEFAULT 'jaas',
-  domain VARCHAR(253) NOT NULL DEFAULT '8x8.vc',
+  provider ENUM('public','self_hosted') NOT NULL DEFAULT 'self_hosted',
+  domain VARCHAR(253) NOT NULL DEFAULT '',
   updated_by CHAR(36) NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT meeting_settings_admin_fk FOREIGN KEY (updated_by) REFERENCES users(id)
 ) ENGINE=InnoDB;
 
-INSERT IGNORE INTO classroom_meeting_settings (id, provider, domain) VALUES (1, 'jaas', '8x8.vc');
+INSERT IGNORE INTO classroom_meeting_settings (id, provider, domain) VALUES (1, 'self_hosted', '');
 
 CREATE TABLE IF NOT EXISTS classroom_jitsi_sessions (
   session_id CHAR(36) PRIMARY KEY,
-  provider ENUM('public','self_hosted','jaas') NOT NULL,
+  provider ENUM('public','self_hosted') NOT NULL,
   domain VARCHAR(253) NOT NULL,
   room_name VARCHAR(320) NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
