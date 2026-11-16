@@ -5,6 +5,7 @@ class SubjectClassroomController extends MY_Controller
 {
     private $users;
     private $classrooms;
+    private $courses;
     private $auth;
     private $gamify;
     private $platformSettings;
@@ -14,10 +15,11 @@ class SubjectClassroomController extends MY_Controller
         parent::__construct();
         $this->users = $this->call->model('User_model');
         $this->classrooms = $this->call->model('SubjectClassroom_model');
+        $this->courses = $this->call->model('Course_model');
         $this->auth = $this->call->model('Auth_model');
         $gamifyModel = $this->call->model('Gamify_model');
         $this->gamify = $this->call->library('Gamify', $gamifyModel);
-        if (!$this->classrooms->schemaReady()) fail_api('Run database migration 008_classrooms.sql before using subject classrooms.', 503);
+        if (!$this->classrooms->schemaReady()) fail_api('Run database migrations 008_classrooms.sql and 011_instructor_subject_courses.sql before using subject classrooms.', 503);
         $this->platformSettings = $this->classrooms->platformSettings();
         if (!$this->platformSettings['classroomsEnabled']) fail_api('Subject classrooms are currently disabled by an administrator.', 503);
     }
@@ -34,6 +36,7 @@ class SubjectClassroomController extends MY_Controller
         $body = json_body();
         $name = trim((string)($body['name'] ?? ''));
         $subject = trim((string)($body['subject'] ?? ''));
+        if ($subject === '') $subject = trim((string)($teacher['subject'] ?? ''));
         $description = trim((string)($body['description'] ?? ''));
         $gradeLevel = trim((string)($body['gradeLevel'] ?? ''));
         $themeColor = (string)($body['themeColor'] ?? '#f47762');
@@ -53,13 +56,17 @@ class SubjectClassroomController extends MY_Controller
             fail_api('Maximum students exceeds the administrator-configured classroom limit.', 422);
         }
 
-        $id = $this->classrooms->createClassroom([
+        $courseSubject = trim((string)($teacher['subject'] ?? ''));
+        if ($courseSubject === '') $courseSubject = $subject;
+
+        $classroom = $this->classrooms->createClassroom([
             'name' => $name, 'subject' => $subject, 'description' => $description,
             'gradeLevel' => $gradeLevel !== '' ? $gradeLevel : null,
             'themeColor' => $themeColor, 'icon' => $icon, 'approvalMode' => $approvalMode,
             'maxStudents' => $maxStudents,
-        ], $teacher['id']);
-        respond(['id' => $id], 'Classroom created.', 201);
+            'courseSubject' => $courseSubject,
+        ], $teacher['id'], $this->courses);
+        respond($classroom, 'Classroom created.', 201);
     }
 
     public function detail($id)

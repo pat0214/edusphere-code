@@ -21,7 +21,13 @@ class SubjectClassroom_model extends Model
              WHERE table_schema = DATABASE() AND table_name IN (?, ?, ?, ?, ?)',
             ['classrooms', 'classroom_teachers', 'classroom_members', 'classroom_audit_events', 'platform_feature_settings']
         )->fetchColumn();
-        return (int)$count === 5;
+        $columns = $this->db->raw(
+            "SELECT COUNT(*) FROM information_schema.columns
+             WHERE table_schema = DATABASE()
+               AND ((table_name = 'classrooms' AND column_name = 'course_id')
+                 OR (table_name = 'users' AND column_name = 'subject'))"
+        )->fetchColumn();
+        return (int)$count === 5 && (int)$columns === 2;
     }
 
     public function platformSettings(): array
@@ -41,10 +47,12 @@ class SubjectClassroom_model extends Model
     public function adminClassrooms(): array
     {
         $rows = $this->db->raw(
-            "SELECT c.id, c.name, c.subject, c.status, c.created_at createdAt, u.name teacherName,
+            "SELECT c.id, c.name, c.subject, c.course_id courseId, co.title courseTitle,
+                    c.status, c.created_at createdAt, u.name teacherName,
                     (SELECT COUNT(*) FROM classroom_members m WHERE m.classroom_id = c.id AND m.status = 'active') studentCount,
                     (SELECT COUNT(*) FROM classroom_members m WHERE m.classroom_id = c.id AND m.status = 'pending') pendingCount
              FROM classrooms c JOIN users u ON u.id = c.owner_id
+             LEFT JOIN courses co ON co.id = c.course_id
              ORDER BY FIELD(c.status,'active','archived'), c.updated_at DESC LIMIT 200"
         )->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$row) {
@@ -68,24 +76,28 @@ class SubjectClassroom_model extends Model
     {
         if ($user['role'] === 'instructor') {
             $rows = $this->db->raw(
-                "SELECT c.id, c.name, c.subject, c.description, c.grade_level gradeLevel, c.theme_color themeColor,
+                "SELECT c.id, c.name, c.subject, c.course_id courseId, co.title courseTitle,
+                        c.description, c.grade_level gradeLevel, c.theme_color themeColor,
                         c.icon, c.approval_mode approvalMode, c.status, c.created_at createdAt,
                         (SELECT COUNT(*) FROM classroom_members m WHERE m.classroom_id = c.id AND m.status = 'active') studentCount,
                         (SELECT COUNT(*) FROM classroom_members m WHERE m.classroom_id = c.id AND m.status = 'pending') pendingCount,
                         ct.role teacherRole
                  FROM classrooms c JOIN classroom_teachers ct ON ct.classroom_id = c.id
+                 LEFT JOIN courses co ON co.id = c.course_id
                  WHERE ct.user_id = ? AND c.status <> 'deleted'
                  ORDER BY FIELD(c.status, 'active', 'archived'), c.updated_at DESC",
                 [$user['id']]
             )->fetchAll(PDO::FETCH_ASSOC);
         } else {
             $rows = $this->db->raw(
-                "SELECT c.id, c.name, c.subject, c.description, c.grade_level gradeLevel, c.theme_color themeColor,
+                "SELECT c.id, c.name, c.subject, c.course_id courseId, co.title courseTitle,
+                        c.description, c.grade_level gradeLevel, c.theme_color themeColor,
                         c.icon, c.status, c.created_at createdAt, m.status membershipStatus, m.requested_at requestedAt,
                         u.name teacherName, u.avatar teacherAvatar
                  FROM classroom_members m
                  JOIN classrooms c ON c.id = m.classroom_id
                  JOIN users u ON u.id = c.owner_id
+                 LEFT JOIN courses co ON co.id = c.course_id
                  WHERE m.user_id = ? AND c.status = 'active' AND m.status IN ('active', 'pending')
                  ORDER BY m.requested_at DESC",
                 [$user['id']]
@@ -99,17 +111,18 @@ class SubjectClassroom_model extends Model
         return $rows;
     }
 
-    public function createClassroom(array $input, string $ownerId): string
+    public function createClassroom(array $input, string $ownerId, Course_model $courses): array
     {
         $id = uuid4();
         $joinCode = strtoupper(bin2hex(random_bytes(4)));
         $token = bin2hex(random_bytes(32));
         $this->db->transaction();
         try {
+            $course = $courses->courseForInstructorSubjectInTransaction($ownerId, $input['courseSubject']);
             $this->db->raw(
-                'INSERT INTO classrooms (id, owner_id, name, subject, description, grade_level, theme_color, icon, approval_mode, max_students, join_code, invite_token)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [$id, $ownerId, $input['name'], $input['subject'], $input['description'], $input['gradeLevel'],
+                'INSERT INTO classrooms (id, owner_id, course_id, name, subject, description, grade_level, theme_color, icon, approval_mode, max_students, join_code, invite_token)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [$id, $ownerId, $course['id'], $input['name'], $input['subject'], $input['description'], $input['gradeLevel'],
                     $input['themeColor'], $input['icon'], $input['approvalMode'], $input['maxStudents'], $joinCode, $token]
             );
             $this->db->raw(
@@ -122,19 +135,21 @@ class SubjectClassroom_model extends Model
             $this->db->roll_back();
             throw $error;
         }
-        return $id;
+        return ['id' => $id, 'courseId' => $course['id'], 'courseTitle' => $input['courseSubject']];
     }
 
     public function detail(string $id, array $user): ?array
     {
         $row = $this->db->raw(
-            "SELECT c.id, c.owner_id ownerId, c.name, c.subject, c.description, c.grade_level gradeLevel,
+            "SELECT c.id, c.owner_id ownerId, c.course_id courseId, co.title courseTitle,
+                    c.name, c.subject, c.description, c.grade_level gradeLevel,
                     c.theme_color themeColor, c.icon, c.approval_mode approvalMode, c.max_students maxStudents,
                     c.status, c.invitations_enabled invitationsEnabled, c.created_at createdAt,
                     (SELECT COUNT(*) FROM classroom_members m WHERE m.classroom_id = c.id AND m.status = 'active') studentCount,
                     (SELECT COUNT(*) FROM classroom_members m WHERE m.classroom_id = c.id AND m.status = 'pending') pendingCount,
                     ct.role teacherRole, m.status membershipStatus
              FROM classrooms c
+             LEFT JOIN courses co ON co.id = c.course_id
              LEFT JOIN classroom_teachers ct ON ct.classroom_id = c.id AND ct.user_id = ?
              LEFT JOIN classroom_members m ON m.classroom_id = c.id AND m.user_id = ?
              WHERE c.id = ? AND c.status <> 'deleted' LIMIT 1",
