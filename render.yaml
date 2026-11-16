@@ -5,11 +5,11 @@ envVarGroups:
       - key: EMAIL_WORKER_TOKEN
         generateValue: true
       - key: API_BASE_URL
-        value: https://edusphere-api.onrender.com
+        value: https://edusphere-code.onrender.com
 
 services:
   - type: web
-    name: edusphere-api
+    name: edusphere-code
     runtime: docker
     plan: starter
     healthCheckPath: /api/v1/health
@@ -48,7 +48,7 @@ services:
       - key: GOOGLE_OAUTH_CLIENT_SECRET
         sync: false
       - key: GOOGLE_OAUTH_REDIRECT_URI
-        value: https://edusphere-api.onrender.com/api/v1/classrooms/google/callback
+        value: https://edusphere-code.onrender.com/api/v1/classrooms/google/callback
       - key: GOOGLE_TOKEN_ENCRYPTION_KEY
         sync: false
       - key: JITSI_JWT_APP_ID
