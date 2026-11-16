@@ -650,47 +650,70 @@ class GeminiPathCoach
             'contents' => $contents,
             'generationConfig' => [
                 'temperature' => 0.5,
-                'maxOutputTokens' => 2048,
+                'maxOutputTokens' => 256,
             ],
         ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
         if ($payload === false) {
             self::chatError('The Gemini chat request could not be prepared.', 500, $throwOnError);
         }
 
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
-            . rawurlencode($model) . ':generateContent';
-        $curl = curl_init($url);
-        if ($curl === false) {
-            self::chatError('Could not initialize a secure connection to Gemini.', 502, $throwOnError);
+        $models = [$model];
+        if ($modelOverride === null) {
+            $fallbackModel = $model === 'gemini-3.8-flash' ? 'gemini-3.6-flash' : 'gemini-3.8-flash';
+            if ($fallbackModel !== $model) {
+                $models[] = $fallbackModel;
+            }
         }
 
-        $options = [
-            CURLOPT_POST => true,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                'Content-Type: application/json',
-                'x-goog-api-key: ' . $apiKey,
-            ],
-            CURLOPT_POSTFIELDS => $payload,
-            CURLOPT_CONNECTTIMEOUT => 8,
-            CURLOPT_TIMEOUT => 40,
-        ];
-        $caBundle = trim((string)getenv('CURL_CA_BUNDLE'));
-        if ($caBundle !== '') $options[CURLOPT_CAINFO] = $caBundle;
-        curl_setopt_array($curl, $options);
+        $body = false;
+        foreach ($models as $attempt => $attemptModel) {
+            $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+                . rawurlencode($attemptModel) . ':generateContent';
+            $curl = curl_init($url);
+            if ($curl === false) {
+                self::chatError('Could not initialize a secure connection to Gemini.', 502, $throwOnError);
+            }
 
-        $body = curl_exec($curl);
-        $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-        $curlError = curl_error($curl);
-        curl_close($curl);
+            $options = [
+                CURLOPT_POST => true,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
+                    'x-goog-api-key: ' . $apiKey,
+                ],
+                CURLOPT_POSTFIELDS => $payload,
+                CURLOPT_CONNECTTIMEOUT => 5,
+                CURLOPT_TIMEOUT => 18,
+            ];
+            $caBundle = trim((string)getenv('CURL_CA_BUNDLE'));
+            if ($caBundle !== '') $options[CURLOPT_CAINFO] = $caBundle;
+            curl_setopt_array($curl, $options);
 
-        if ($body === false) {
-            error_log('Gemini study chat request failed: ' . $curlError);
-            self::chatError('Could not reach Gemini. Check the API connection and try again.', 502, $throwOnError);
-        }
-        if ($status < 200 || $status >= 300) {
-            error_log('Gemini study chat returned HTTP ' . $status . '.');
-            self::chatError('Gemini could not answer. Check the API key, model, and quota.', 502, $throwOnError);
+            $body = curl_exec($curl);
+            $status = (int)curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+            $curlError = curl_error($curl);
+            curl_close($curl);
+
+            if ($body !== false && $status >= 200 && $status < 300) {
+                break;
+            }
+
+            $retryable = $body === false || in_array($status, [408, 429, 500, 502, 503, 504], true);
+            $hasFallback = isset($models[$attempt + 1]);
+            if (!$retryable || !$hasFallback) {
+                if ($body === false) {
+                    error_log("Gemini study chat request failed for model $attemptModel: $curlError");
+                    self::chatError('Could not reach Gemini. Check the API connection and try again.', 502, $throwOnError);
+                }
+                error_log("Gemini study chat model $attemptModel returned HTTP $status.");
+                self::chatError('Gemini could not answer. Check the API key, model, and quota.', 502, $throwOnError);
+            }
+
+            if ($body === false) {
+                error_log("Gemini study chat request failed for model $attemptModel: $curlError; trying fallback model.");
+            } else {
+                error_log("Gemini study chat model $attemptModel returned HTTP $status; trying fallback model.");
+            }
         }
 
         $response = json_decode($body, true);
