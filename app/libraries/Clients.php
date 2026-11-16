@@ -659,7 +659,7 @@ class GeminiPathCoach
 
         $models = [$model];
         if ($modelOverride === null) {
-            $fallbackModel = $model === 'gemini-3.8-flash' ? 'gemini-3.6-flash' : 'gemini-3.8-flash';
+            $fallbackModel = $model === 'gemini-3.5-flash-lite' ? 'gemini-3.6-flash' : 'gemini-3.5-flash-lite';
             if ($fallbackModel !== $model) {
                 $models[] = $fallbackModel;
             }
@@ -667,12 +667,15 @@ class GeminiPathCoach
 
         $body = false;
         foreach ($models as $attempt => $attemptModel) {
+            $hasFallback = isset($models[$attempt + 1]);
+            if ($attempt > 0) usleep(random_int(100000, 300000));
             $url = 'https://generativelanguage.googleapis.com/v1beta/models/'
                 . rawurlencode($attemptModel) . ':generateContent';
             $curl = curl_init($url);
             if ($curl === false) {
                 self::chatError('Could not initialize a secure connection to Gemini.', 502, $throwOnError);
             }
+            $timeoutSeconds = $hasFallback ? 9 : ($attempt > 0 ? 13 : 20);
 
             $options = [
                 CURLOPT_POST => true,
@@ -682,8 +685,8 @@ class GeminiPathCoach
                     'x-goog-api-key: ' . $apiKey,
                 ],
                 CURLOPT_POSTFIELDS => $payload,
-                CURLOPT_CONNECTTIMEOUT => 5,
-                CURLOPT_TIMEOUT => 18,
+                CURLOPT_CONNECTTIMEOUT => min(5, $timeoutSeconds),
+                CURLOPT_TIMEOUT => $timeoutSeconds,
             ];
             $caBundle = trim((string)getenv('CURL_CA_BUNDLE'));
             if ($caBundle !== '') $options[CURLOPT_CAINFO] = $caBundle;
@@ -699,7 +702,6 @@ class GeminiPathCoach
             }
 
             $retryable = $body === false || in_array($status, [408, 429, 500, 502, 503, 504], true);
-            $hasFallback = isset($models[$attempt + 1]);
             if (!$retryable || !$hasFallback) {
                 if ($body === false) {
                     error_log("Gemini study chat request failed for model $attemptModel: $curlError");
