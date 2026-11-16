@@ -69,9 +69,17 @@ class SubjectClassroomController extends MY_Controller
         respond($classroom, 'Classroom created.', 201);
     }
 
+    public function grantAdminAccess($id)
+    {
+        $admin = require_role($this->users, ['admin']);
+        if (!preg_match('/^[0-9a-f-]{36}$/i', (string)$id)) fail_api('Classroom not found.', 404);
+        if (!$this->classrooms->addAdminAsCoTeacher($id, $admin['id'])) fail_api('Active classroom not found.', 404);
+        respond(['classroomId' => $id], 'Teacher access granted.');
+    }
+
     public function detail($id)
     {
-        $user = require_role($this->users, ['student', 'instructor']);
+        $user = require_role($this->users, ['student', 'instructor', 'admin']);
         if (!preg_match('/^[0-9a-f-]{36}$/i', (string)$id)) fail_api('Classroom not found.', 404);
         $classroom = $this->classrooms->detail($id, $user);
         if (!$classroom) fail_api('Classroom not found or you do not have access.', 404);
@@ -134,7 +142,7 @@ class SubjectClassroomController extends MY_Controller
 
     public function inviteDetails($id)
     {
-        $teacher = require_role($this->users, ['instructor']);
+        $teacher = require_role($this->users, ['instructor', 'admin']);
         $details = $this->classrooms->inviteDetails($id, $teacher['id']);
         if (!$details) fail_api('Classroom not found.', 404);
         $details['invitationsEnabled'] = (bool)$details['invitationsEnabled'];

@@ -81,7 +81,7 @@ class ClassroomMeetingController extends MY_Controller
 
     public function sessions($classroomId)
     {
-        $user = require_role($this->users, ['student', 'instructor']);
+        $user = require_role($this->users, ['student', 'instructor', 'admin']);
         if (!$this->meetings->platformSettings()['classroomsEnabled']) fail_api('Subject classrooms are currently disabled by an administrator.', 503);
         $sessions = $this->meetings->sessionsForClassroom($classroomId, $user['id']);
         if ($sessions === null) fail_api('Classroom not found or you do not have access.', 404);

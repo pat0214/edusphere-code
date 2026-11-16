@@ -131,3 +131,4 @@ $router->get ('/api/v1/admin/classroom-stats', 'ClassroomMeetingController::admi
 $router->get ('/api/v1/admin/classroom-settings', 'ClassroomMeetingController::adminSettings');
 $router->patch('/api/v1/admin/classroom-settings', 'ClassroomMeetingController::updateAdminSettings');
 $router->patch('/api/v1/admin/classrooms/{id}', 'ClassroomMeetingController::adminUpdateClassroom');
+$router->post('/api/v1/admin/classrooms/{id}/access', 'SubjectClassroomController::grantAdminAccess');

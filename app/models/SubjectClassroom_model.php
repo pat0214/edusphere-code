@@ -138,6 +138,36 @@ class SubjectClassroom_model extends Model
         return ['id' => $id, 'courseId' => $course['id'], 'courseTitle' => $input['courseSubject']];
     }
 
+    public function addAdminAsCoTeacher(string $classroomId, string $adminId): bool
+    {
+        $this->db->transaction();
+        try {
+            $eligible = $this->db->raw(
+                "SELECT c.id FROM classrooms c JOIN users u ON u.id = ?
+                 WHERE c.id = ? AND c.status = 'active' AND u.role = 'admin' AND u.active = 1
+                 LIMIT 1 FOR UPDATE",
+                [$adminId, $classroomId]
+            )->fetch(PDO::FETCH_ASSOC);
+            if (!$eligible) {
+                $this->db->roll_back();
+                return false;
+            }
+
+            $insert = $this->db->raw(
+                "INSERT IGNORE INTO classroom_teachers (classroom_id, user_id, role) VALUES (?, ?, 'co_teacher')",
+                [$classroomId, $adminId]
+            );
+            if ($insert->rowCount() > 0) {
+                $this->audit($classroomId, $adminId, $adminId, 'admin_co_teacher_added', ['role' => 'co_teacher']);
+            }
+            $this->db->commit();
+            return true;
+        } catch (Throwable $error) {
+            $this->db->roll_back();
+            throw $error;
+        }
+    }
+
     public function detail(string $id, array $user): ?array
     {
         $row = $this->db->raw(
@@ -205,13 +235,15 @@ class SubjectClassroom_model extends Model
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public function inviteDetails(string $id, string $ownerId): ?array
+    public function inviteDetails(string $id, string $teacherId): ?array
     {
         return $this->db->raw(
-            'SELECT id, join_code joinCode, invite_token inviteToken, invitations_enabled invitationsEnabled,
-                    invite_expires_at expiresAt, invite_max_uses maxUses, invite_uses uses
-             FROM classrooms WHERE id = ? AND owner_id = ? AND status = \'active\' LIMIT 1',
-            [$id, $ownerId]
+            'SELECT c.id, c.join_code joinCode, c.invite_token inviteToken, c.invitations_enabled invitationsEnabled,
+                    c.invite_expires_at expiresAt, c.invite_max_uses maxUses, c.invite_uses uses
+             FROM classrooms c
+             JOIN classroom_teachers ct ON ct.classroom_id = c.id AND ct.user_id = ?
+             WHERE c.id = ? AND c.status = \'active\' LIMIT 1',
+            [$teacherId, $id]
         )->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
