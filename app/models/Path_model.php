@@ -163,16 +163,35 @@ class Path_model extends Model
         return $questions;
     }
 
-    public function assistantLessonsForPath($pathId): array
+    public function assistantLessonsForPath($pathId, string $query = ''): array
     {
+        $terms = preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($query), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $terms = array_values(array_diff(
+            array_unique($terms),
+            ['what', 'when', 'where', 'which', 'who', 'why', 'how', 'the', 'and', 'for', 'from', 'with', 'about', 'explain', 'define', 'tell', 'please']
+        ));
+        $terms = array_slice(array_filter($terms, static fn($term) => mb_strlen($term) >= 3), 0, 5);
+        $scores = [];
+        $params = [];
+        foreach ($terms as $term) {
+            $pattern = '%' . $term . '%';
+            $scores[] = 'CASE WHEN l.title LIKE ? THEN 5 ELSE 0 END';
+            $scores[] = 'CASE WHEN m.title LIKE ? THEN 3 ELSE 0 END';
+            $scores[] = 'CASE WHEN l.content LIKE ? THEN 1 ELSE 0 END';
+            array_push($params, $pattern, $pattern, $pattern);
+        }
+        $relevance = $scores ? '(' . implode(' + ', $scores) . ')' : '0';
         $lessons = $this->db->raw(
-            "SELECT l.title, m.title module_title, l.content
+            "SELECT l.title, m.title module_title, l.content, $relevance relevance
              FROM learning_path_items pi
              JOIN lessons l ON l.id = pi.lesson_id
              JOIN modules m ON m.id = l.module_id
-             WHERE pi.path_id = ? AND pi.status != 'done'
-             ORDER BY pi.position LIMIT 8",
-            [$pathId]
+             WHERE pi.path_id = ?
+             ORDER BY relevance DESC,
+               CASE pi.status WHEN 'current' THEN 0 WHEN 'locked' THEN 1 ELSE 2 END,
+               pi.position
+             LIMIT 8",
+            array_merge($params, [$pathId])
         )->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($lessons as &$lesson) {
@@ -180,6 +199,7 @@ class Path_model extends Model
             $lesson['module'] = mb_substr((string)$lesson['module_title'], 0, 160);
             $lesson['content'] = mb_substr((string)$lesson['content'], 0, 2500);
             unset($lesson['module_title']);
+            unset($lesson['relevance']);
         }
         unset($lesson);
 

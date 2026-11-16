@@ -658,11 +658,9 @@ class GeminiPathCoach
         }
 
         $models = [$model];
-        if ($modelOverride === null) {
-            $fallbackModel = $model === 'gemini-3.5-flash-lite' ? 'gemini-3.6-flash' : 'gemini-3.5-flash-lite';
-            if ($fallbackModel !== $model) {
-                $models[] = $fallbackModel;
-            }
+        $fallbackModel = $model === 'gemini-3.5-flash-lite' ? 'gemini-3.6-flash' : 'gemini-3.5-flash-lite';
+        if ($fallbackModel !== $model) {
+            $models[] = $fallbackModel;
         }
 
         $body = false;
