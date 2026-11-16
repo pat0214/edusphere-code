@@ -21,11 +21,14 @@ class ClassroomMeetingController extends MY_Controller
 
     public function connection()
     {
-        $teacher = require_role($this->users, ['instructor']);
+        $user = require_role($this->users, ['student', 'instructor']);
         $settings = $this->meetings->platformSettings();
         $meetingSettings = $this->meetings->meetingSettings();
         $provider = JitsiMeetingProvider::settingsFromDatabase($meetingSettings);
-        respond($this->meetings->googleConnection($teacher['id']) + [
+        $googleConnection = $user['role'] === 'instructor'
+            ? $this->meetings->googleConnection($user['id'])
+            : ['connected' => false, 'googleEmail' => null, 'connectedAt' => null];
+        respond($googleConnection + [
             'googleConfigured' => GoogleCalendarClient::configured() && $this->meetings->encryptionReady(),
             'provider' => $meetingSettings['provider'],
             'domain' => $meetingSettings['domain'],
@@ -90,7 +93,7 @@ class ClassroomMeetingController extends MY_Controller
 
     public function start($classroomId)
     {
-        $teacher = require_role($this->users, ['instructor']);
+        $host = require_role($this->users, ['student', 'instructor']);
         $settings = $this->meetings->platformSettings();
         if (!$settings['classroomsEnabled'] || !$settings['liveSessionsEnabled']) fail_api('Live classroom sessions are disabled by an administrator.', 503);
         $meetingSettings = $this->meetings->meetingSettings();
@@ -107,25 +110,104 @@ class ClassroomMeetingController extends MY_Controller
         if ($title !== '' && (strlen($title) < 3 || strlen($title) > 160)) fail_api('Session title must be between 3 and 160 characters.', 422);
         if (strlen($description) > 1000) fail_api('Session topic cannot exceed 1,000 characters.', 422);
         if ($duration === false || $duration < 10 || $duration > $maxDuration) fail_api('Session length must be between 10 and ' . $maxDuration . ' minutes for the selected Jitsi provider.', 422);
-        $notifyStudents = $body['notifyStudents'] ?? true;
+        $notifyStudents = $host['role'] === 'student' ? true : ($body['notifyStudents'] ?? true);
         if (!is_bool($notifyStudents)) fail_api('notifyStudents must be true or false.', 422);
 
         $room = $provider->createRoom();
-        $prepared = $this->meetings->prepareSession($classroomId, $teacher['id'], $requestId, $title, $description, $duration, $room);
+        $prepared = $this->meetings->prepareSession($classroomId, $host['id'], $requestId, $title, $description, $duration, $room);
         if (($prepared['error'] ?? null) === 'not_found') fail_api('Classroom not found.', 404);
         if (($prepared['error'] ?? null) === 'request_expired') fail_api('That start request belongs to a session that has ended. Start a new session instead.', 409);
+        if (($prepared['error'] ?? null) === 'schedule_conflict') fail_api('A scheduled session overlaps with that time. Join or reschedule the upcoming class instead.', 409);
         $session = $prepared['session'];
         $title = $session['title'];
         $calendarNotice = null;
         if (empty($prepared['duplicate']) && $notifyStudents) {
-            $calendarNotice = $this->createCalendarNotice($teacher['id'], $classroomId, $prepared['classroomName'], $session, $description);
-            $notificationFailures = $this->notifyMembers($classroomId, $teacher['name'], $title);
+            if ($host['role'] === 'instructor') {
+                $calendarNotice = $this->createCalendarNotice($host['id'], $classroomId, $prepared['classroomName'], $session, $description);
+            }
+            $notificationFailures = $this->notifyMembers(
+                $classroomId,
+                $host['name'],
+                $title,
+                $host['id'],
+                'classroom_live_session'
+            );
         } else {
             $notificationFailures = 0;
         }
         $message = $notificationFailures
-            ? 'Live session is active, but EduSphere notifications could not be queued for ' . $notificationFailures . ' students.'
+            ? 'Live session is active, but EduSphere notifications could not be queued for ' . $notificationFailures . ' classroom members.'
             : (!empty($prepared['duplicate']) ? 'An active live session already exists.' : 'Live session started.');
+        if ($calendarNotice !== null) $message .= ' ' . $calendarNotice;
+        respond(['session' => $session], $message, empty($prepared['duplicate']) ? 201 : 200);
+    }
+
+    public function schedule($classroomId)
+    {
+        $teacher = require_role($this->users, ['instructor']);
+        if (!$this->meetings->scheduledSessionSchemaReady()) {
+            fail_api('Run database migration 012_classroom_collaboration.sql before scheduling sessions.', 503);
+        }
+        $settings = $this->meetings->platformSettings();
+        if (!$settings['classroomsEnabled'] || !$settings['liveSessionsEnabled']) fail_api('Live classroom sessions are disabled by an administrator.', 503);
+        $meetingSettings = $this->meetings->meetingSettings();
+        $provider = JitsiMeetingProvider::settingsFromDatabase($meetingSettings);
+        if (!$provider->configured()) fail_api('Configure the selected Jitsi provider on the backend before scheduling a live session.', 503);
+        $maxDuration = $this->maxSessionDuration($settings, $meetingSettings);
+
+        $body = json_body();
+        $requestId = (string)($body['requestId'] ?? '');
+        $title = trim((string)($body['title'] ?? ''));
+        $description = trim((string)($body['description'] ?? ''));
+        $requestedStart = $body['startsAt'] ?? null;
+        $duration = filter_var($body['durationMinutes'] ?? 60, FILTER_VALIDATE_INT);
+        if (!preg_match('/^[0-9a-f-]{36}$/i', $requestId)) fail_api('A valid session request ID is required.', 422);
+        if ($title !== '' && (strlen($title) < 3 || strlen($title) > 160)) fail_api('Session title must be between 3 and 160 characters.', 422);
+        if (strlen($description) > 1000) fail_api('Session topic cannot exceed 1,000 characters.', 422);
+        if ($duration === false || $duration < 10 || $duration > $maxDuration) fail_api('Session length must be between 10 and ' . $maxDuration . ' minutes for the selected Jitsi provider.', 422);
+        if (!is_string($requestedStart)
+            || !preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/', $requestedStart)) {
+            fail_api('Choose a valid future date and time for the session.', 422);
+        }
+        $startTimestamp = strtotime($requestedStart);
+        if ($startTimestamp === false || $startTimestamp < time() + 300 || $startTimestamp > time() + 365 * 86400) {
+            fail_api('Schedule the session at least 5 minutes from now and within the next year.', 422);
+        }
+        $startsAt = gmdate('Y-m-d H:i:s', $startTimestamp);
+        $notifyStudents = $body['notifyStudents'] ?? true;
+        if (!is_bool($notifyStudents)) fail_api('notifyStudents must be true or false.', 422);
+
+        $room = $provider->createRoom();
+        $prepared = $this->meetings->scheduleSession(
+            $classroomId,
+            $teacher['id'],
+            $requestId,
+            $title,
+            $description,
+            $duration,
+            $startsAt,
+            $room
+        );
+        if (($prepared['error'] ?? null) === 'not_found') fail_api('Classroom not found.', 404);
+        if (($prepared['error'] ?? null) === 'request_expired') fail_api('That schedule request is no longer available. Create a new schedule instead.', 409);
+        if (($prepared['error'] ?? null) === 'schedule_conflict') fail_api('Another live session is already scheduled for that time.', 409);
+        $session = $prepared['session'];
+        $calendarNotice = null;
+        if (empty($prepared['duplicate']) && $notifyStudents) {
+            $calendarNotice = $this->createCalendarNotice($teacher['id'], $classroomId, $prepared['classroomName'], $session, $description);
+            $notificationFailures = $this->notifyMembers(
+                $classroomId,
+                $teacher['name'],
+                $session['title'],
+                $teacher['id'],
+                'classroom_live_session_scheduled'
+            );
+        } else {
+            $notificationFailures = 0;
+        }
+        $message = $notificationFailures
+            ? 'Session scheduled, but EduSphere notifications could not be queued for ' . $notificationFailures . ' classroom members.'
+            : (!empty($prepared['duplicate']) ? 'That session is already scheduled.' : 'Live session scheduled.');
         if ($calendarNotice !== null) $message .= ' ' . $calendarNotice;
         respond(['session' => $session], $message, empty($prepared['duplicate']) ? 201 : 200);
     }
@@ -263,8 +345,8 @@ class ClassroomMeetingController extends MY_Controller
                 'summary' => $classroomName . ' - ' . $session['title'],
                 'description' => $description,
                 'location' => $classroomUrl,
-                'start' => ['dateTime' => gmdate('c', strtotime($session['startsAt'])), 'timeZone' => 'UTC'],
-                'end' => ['dateTime' => gmdate('c', strtotime($session['endsAt'])), 'timeZone' => 'UTC'],
+                'start' => ['dateTime' => gmdate('c', strtotime($session['startsAt'] . ' UTC')), 'timeZone' => 'UTC'],
+                'end' => ['dateTime' => gmdate('c', strtotime($session['endsAt'] . ' UTC')), 'timeZone' => 'UTC'],
                 'visibility' => 'private',
                 'guestsCanModify' => false,
                 'guestsCanInviteOthers' => false,
@@ -284,7 +366,7 @@ class ClassroomMeetingController extends MY_Controller
                 : 'Google Calendar invitation was sent to active students.';
         } catch (Throwable $error) {
             error_log('Optional Google Calendar notification could not be sent for a Jitsi session.');
-            return 'The Jitsi session is active, but the optional Google Calendar invitation could not be sent.';
+            return 'The Jitsi session is ready, but the optional Google Calendar invitation could not be sent.';
         }
     }
 
@@ -298,15 +380,25 @@ class ClassroomMeetingController extends MY_Controller
         respond(['id' => $classroomId, 'status' => $status], 'Classroom status updated.');
     }
 
-    private function notifyMembers(string $classroomId, string $teacherName, string $title): int
+    private function notifyMembers(string $classroomId, string $hostName, string $title, string $hostId, string $type): int
     {
-        $members = $this->meetings->activeMemberIds($classroomId);
+        $members = $this->meetings->sessionRecipientIds($classroomId);
         $gamifyModel = $this->call->model('Gamify_model');
         $gamify = $this->call->library('Gamify', $gamifyModel);
         $failed = 0;
         foreach ($members as $memberId) {
+            if ($memberId === $hostId) continue;
             try {
-                $gamify->notify($memberId, 'classroom_live_session', 'Live classroom started', $teacherName . ' started "' . $title . '". Open your classroom to join.');
+                $scheduled = $type === 'classroom_live_session_scheduled';
+                $message = $scheduled
+                    ? $hostName . ' scheduled "' . $title . '". Open your classroom to see the schedule.'
+                    : $hostName . ' started "' . $title . '". Open your classroom to join.';
+                $gamify->notify(
+                    $memberId,
+                    $type,
+                    $scheduled ? 'Live classroom scheduled' : 'Live classroom started',
+                    $message
+                );
             } catch (Throwable $error) {
                 error_log('Classroom live-session notification could not be queued.');
                 $failed++;

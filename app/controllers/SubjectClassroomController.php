@@ -220,6 +220,14 @@ class SubjectClassroomController extends MY_Controller
         $studentId = $decision['userId'];
         $context = $this->classrooms->notificationContext($id);
         $this->notify($studentId, 'classroom_join_approved', 'Classroom request approved', 'Your request to join ' . ($context['name'] ?? 'a classroom') . ' was approved.');
+        if ($context) {
+            $this->notify(
+                $context['ownerId'],
+                'classroom_student_joined',
+                'New student joined your classroom',
+                'A student joined ' . $context['name'] . ' after approval.'
+            );
+        }
         respond(['memberId' => $memberId], 'Student approved.');
     }
 
@@ -270,7 +278,9 @@ class SubjectClassroomController extends MY_Controller
         if (!$context) return;
         if ($result['status'] === 'pending') {
             $this->notify($context['ownerId'], 'classroom_join_request', 'New classroom join request', $student['name'] . ' requested to join ' . $context['name'] . '.');
+            $this->notify($student['id'], 'classroom_join_request_received', 'Classroom request received', 'Your request to join ' . $context['name'] . ' is waiting for the teacher\'s approval.');
         } else {
+            $this->notify($context['ownerId'], 'classroom_student_joined', 'New student joined your classroom', $student['name'] . ' joined ' . $context['name'] . '.');
             $this->notify($student['id'], 'classroom_joined', 'You joined a classroom', 'You are now a member of ' . $context['name'] . '.');
         }
     }

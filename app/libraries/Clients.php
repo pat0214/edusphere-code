@@ -367,7 +367,7 @@ class PayMongoService
     }
 }
 
-/** Resend-backed transactional email with SMTP fallback. */
+/** SMTP-backed transactional email with Resend fallback. */
 class MailService
 {
     public static function configured(): bool
@@ -377,46 +377,46 @@ class MailService
 
     public static function send(string $to, string $subject, string $html, ?string $text = null): bool
     {
+        $config = self::smtpConfig();
+        if ($config !== null) {
+            require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
+            $mailer = new \PHPMailer\PHPMailer\PHPMailer(true);
+            try {
+                $mailer->isSMTP();
+                $mailer->Host = $config['host'];
+                $mailer->Port = $config['port'];
+                $mailer->SMTPAuth = $config['user'] !== null;
+                $mailer->SMTPAutoTLS = $config['secure'] !== 'none';
+                if ($mailer->SMTPAuth) {
+                    $mailer->Username = $config['user'];
+                    $mailer->Password = $config['pass'];
+                }
+                if ($config['secure'] === 'ssl') {
+                    $mailer->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+                } elseif ($config['secure'] === 'tls') {
+                    $mailer->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+                }
+                $mailer->Timeout = 15;
+                $mailer->CharSet = 'UTF-8';
+                $mailer->setFrom(getenv('MAIL_FROM_ADDRESS') ?: 'noreply@edusphere.dev', getenv('MAIL_FROM_NAME') ?: 'EduSphere');
+                $mailer->addAddress($to);
+                $mailer->Subject = $subject;
+                $mailer->isHTML(true);
+                $mailer->Body = $html;
+                if ($text !== null) $mailer->AltBody = $text;
+                $mailer->send();
+                return true;
+            } catch (\PHPMailer\PHPMailer\Exception $error) {
+                error_log('SMTP email delivery failed: ' . $mailer->ErrorInfo);
+                return false;
+            }
+        }
+
         $resend = self::resendConfig();
         if ($resend !== null) return self::sendWithResend($resend, $to, $subject, $html, $text);
 
-        $config = self::smtpConfig();
-        if ($config === null) {
-            error_log('Email delivery is not configured: set RESEND_API_KEY and MAIL_FROM, or configure SMTP.');
-            return false;
-        }
-
-        require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
-        $mailer = new \PHPMailer\PHPMailer\PHPMailer(true);
-        try {
-            $mailer->isSMTP();
-            $mailer->Host = $config['host'];
-            $mailer->Port = $config['port'];
-            $mailer->SMTPAuth = $config['user'] !== null;
-            $mailer->SMTPAutoTLS = $config['secure'] !== 'none';
-            if ($mailer->SMTPAuth) {
-                $mailer->Username = $config['user'];
-                $mailer->Password = $config['pass'];
-            }
-            if ($config['secure'] === 'ssl') {
-                $mailer->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
-            } elseif ($config['secure'] === 'tls') {
-                $mailer->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
-            }
-            $mailer->Timeout = 15;
-            $mailer->CharSet = 'UTF-8';
-            $mailer->setFrom(getenv('MAIL_FROM_ADDRESS') ?: 'noreply@edusphere.dev', getenv('MAIL_FROM_NAME') ?: 'EduSphere');
-            $mailer->addAddress($to);
-            $mailer->Subject = $subject;
-            $mailer->isHTML(true);
-            $mailer->Body = $html;
-            if ($text !== null) $mailer->AltBody = $text;
-            $mailer->send();
-            return true;
-        } catch (\PHPMailer\PHPMailer\Exception $error) {
-            error_log('SMTP email delivery failed: ' . $mailer->ErrorInfo);
-            return false;
-        }
+        error_log('Email delivery is not configured: set RESEND_API_KEY and MAIL_FROM, or configure SMTP.');
+        return false;
     }
 
     public static function sendCertificate(array $certificate, bool $testDelivery = false): bool

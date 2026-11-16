@@ -54,6 +54,11 @@ $router->post('/api/v1/classrooms',                         'SubjectClassroomCon
 $router->get ('/api/v1/classrooms/invites/{token}',          'SubjectClassroomController::invitePreview');
 $router->post('/api/v1/classrooms/join/code',               'SubjectClassroomController::joinCode');
 $router->post('/api/v1/classrooms/join/invite/{token}',     'SubjectClassroomController::joinInvite');
+$router->get ('/api/v1/classrooms/{id}/chat',               'ClassroomContentController::chat');
+$router->post('/api/v1/classrooms/{id}/chat',               'ClassroomContentController::sendMessage');
+$router->get ('/api/v1/classrooms/{id}/materials',          'ClassroomContentController::materials');
+$router->post('/api/v1/classrooms/{id}/materials',          'ClassroomContentController::uploadMaterial');
+$router->get ('/api/v1/classroom-materials/{id}',          'ClassroomContentController::downloadMaterial');
 $router->get ('/api/v1/classrooms/{id}/members',             'SubjectClassroomController::members');
 $router->get ('/api/v1/classrooms/{id}/invite',              'SubjectClassroomController::inviteDetails');
 $router->patch('/api/v1/classrooms/{id}/invite',             'SubjectClassroomController::updateInvite');
@@ -62,6 +67,7 @@ $router->post('/api/v1/classrooms/{id}/members/{memberId}/decline', 'SubjectClas
 $router->post('/api/v1/classrooms/{id}/members/{memberId}/remove',  'SubjectClassroomController::removeMember');
 $router->get ('/api/v1/classrooms/{id}/live-sessions',       'ClassroomMeetingController::sessions');
 $router->post('/api/v1/classrooms/{id}/live-sessions/start', 'ClassroomMeetingController::start');
+$router->post('/api/v1/classrooms/{id}/live-sessions/schedule', 'ClassroomMeetingController::schedule');
 $router->post('/api/v1/classroom-sessions/{id}/join',        'ClassroomMeetingController::join');
 $router->post('/api/v1/classroom-sessions/{id}/leave',       'ClassroomMeetingController::leave');
 $router->post('/api/v1/classroom-sessions/{id}/end',         'ClassroomMeetingController::end');

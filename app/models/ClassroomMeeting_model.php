@@ -38,6 +38,15 @@ class ClassroomMeeting_model extends Model
         return (int)$count === 2;
     }
 
+    public function scheduledSessionSchemaReady(): bool
+    {
+        $type = $this->db->raw(
+            "SELECT column_type FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = 'classroom_live_sessions' AND column_name = 'status' LIMIT 1"
+        )->fetchColumn();
+        return is_string($type) && strpos($type, "'scheduled'") !== false;
+    }
+
     public function meetingSettings(): array
     {
         $row = $this->db->raw(
@@ -195,14 +204,19 @@ class ClassroomMeeting_model extends Model
         $this->db->raw('DELETE FROM classroom_google_accounts WHERE user_id = ?', [$userId]);
     }
 
-    public function prepareSession(string $classroomId, string $teacherId, string $requestId, string $title, string $description, int $durationMinutes, array $meeting): array
+    public function prepareSession(string $classroomId, string $hostId, string $requestId, string $title, string $description, int $durationMinutes, array $meeting): array
     {
         $this->db->transaction();
         try {
             $classroom = $this->db->raw(
-                "SELECT c.id, c.name FROM classrooms c JOIN classroom_teachers ct ON ct.classroom_id = c.id
-                 WHERE c.id = ? AND ct.user_id = ? AND c.status = 'active' LIMIT 1 FOR UPDATE",
-                [$classroomId, $teacherId]
+                "SELECT c.id, c.name FROM classrooms c
+                 WHERE c.id = ? AND c.status = 'active'
+                   AND (
+                     EXISTS (SELECT 1 FROM classroom_teachers ct WHERE ct.classroom_id = c.id AND ct.user_id = ?)
+                     OR EXISTS (SELECT 1 FROM classroom_members m WHERE m.classroom_id = c.id AND m.user_id = ? AND m.status = 'active')
+                   )
+                 LIMIT 1 FOR UPDATE",
+                [$classroomId, $hostId, $hostId]
             )->fetch(PDO::FETCH_ASSOC);
             if (!$classroom) {
                 $this->db->roll_back();
@@ -211,7 +225,12 @@ class ClassroomMeeting_model extends Model
             if ($title === '') $title = $classroom['name'] . ' - Live Session';
             $this->db->raw(
                 "UPDATE classroom_live_sessions SET status = 'ended', meet_url = NULL, updated_at = NOW()
-                 WHERE classroom_id = ? AND status IN ('provisioning','live') AND ends_at <= NOW()",
+                 WHERE classroom_id = ? AND status IN ('provisioning','scheduled','live') AND ends_at <= NOW()",
+                [$classroomId]
+            );
+            $this->db->raw(
+                "UPDATE classroom_live_sessions SET status = 'live', updated_at = NOW()
+                 WHERE classroom_id = ? AND status = 'scheduled' AND starts_at <= NOW() AND ends_at > NOW()",
                 [$classroomId]
             );
             $active = $this->db->raw(
@@ -246,15 +265,25 @@ class ClassroomMeeting_model extends Model
                 return ['error' => 'request_expired'];
             }
             $start = time();
-            $sessionId = uuid4();
-            $eventId = $this->googleEventId();
             $startsAt = gmdate('Y-m-d H:i:s', $start);
             $endsAt = gmdate('Y-m-d H:i:s', $start + $durationMinutes * 60);
+            $conflict = $this->db->raw(
+                "SELECT id FROM classroom_live_sessions
+                 WHERE classroom_id = ? AND status = 'scheduled'
+                   AND starts_at < ? AND ends_at > ? LIMIT 1 FOR UPDATE",
+                [$classroomId, $endsAt, $startsAt]
+            )->fetch(PDO::FETCH_ASSOC);
+            if ($conflict) {
+                $this->db->roll_back();
+                return ['error' => 'schedule_conflict'];
+            }
+            $sessionId = uuid4();
+            $eventId = $this->googleEventId();
             $this->db->raw(
                 'INSERT INTO classroom_live_sessions
                  (id, classroom_id, created_by, title, description, status, starts_at, ends_at, google_event_id, request_id)
                  VALUES (?, ?, ?, ?, ?, \'live\', ?, ?, ?, ?)',
-                [$sessionId, $classroomId, $teacherId, $title, $description, $startsAt, $endsAt, $eventId, $requestId]
+                [$sessionId, $classroomId, $hostId, $title, $description, $startsAt, $endsAt, $eventId, $requestId]
             );
             $this->db->raw(
                 'INSERT INTO classroom_jitsi_sessions (session_id, provider, domain, room_name) VALUES (?, ?, ?, ?)',
@@ -273,11 +302,93 @@ class ClassroomMeeting_model extends Model
         }
     }
 
+    public function scheduleSession(
+        string $classroomId,
+        string $teacherId,
+        string $requestId,
+        string $title,
+        string $description,
+        int $durationMinutes,
+        string $startsAt,
+        array $meeting
+    ): array {
+        $this->db->transaction();
+        try {
+            $classroom = $this->db->raw(
+                "SELECT c.id, c.name FROM classrooms c JOIN classroom_teachers ct ON ct.classroom_id = c.id
+                 WHERE c.id = ? AND ct.user_id = ? AND c.status = 'active' LIMIT 1 FOR UPDATE",
+                [$classroomId, $teacherId]
+            )->fetch(PDO::FETCH_ASSOC);
+            if (!$classroom) {
+                $this->db->roll_back();
+                return ['error' => 'not_found'];
+            }
+            if ($title === '') $title = $classroom['name'] . ' - Live Session';
+
+            $existing = $this->db->raw(
+                'SELECT id, google_event_id googleEventId, request_id requestId, status, title,
+                        starts_at startsAt, ends_at endsAt
+                 FROM classroom_live_sessions WHERE classroom_id = ? AND request_id = ? LIMIT 1 FOR UPDATE',
+                [$classroomId, $requestId]
+            )->fetch(PDO::FETCH_ASSOC);
+            if ($existing) {
+                $jitsi = $this->db->raw(
+                    'SELECT provider, domain, room_name roomName FROM classroom_jitsi_sessions WHERE session_id = ? LIMIT 1',
+                    [$existing['id']]
+                )->fetch(PDO::FETCH_ASSOC);
+                if ($jitsi && in_array($existing['status'], ['scheduled', 'live'], true)
+                    && strtotime($existing['endsAt'] . ' UTC') > time()) {
+                    $existing = array_merge($existing, $jitsi);
+                    $this->db->commit();
+                    return ['session' => $existing, 'classroomName' => $classroom['name'], 'duplicate' => true];
+                }
+                $this->db->roll_back();
+                return ['error' => 'request_expired'];
+            }
+
+            $startTimestamp = strtotime($startsAt . ' UTC');
+            $endsAt = gmdate('Y-m-d H:i:s', $startTimestamp + $durationMinutes * 60);
+            $conflict = $this->db->raw(
+                "SELECT id FROM classroom_live_sessions
+                 WHERE classroom_id = ? AND status IN ('scheduled','provisioning','live')
+                   AND starts_at < ? AND ends_at > ? LIMIT 1 FOR UPDATE",
+                [$classroomId, $endsAt, $startsAt]
+            )->fetch(PDO::FETCH_ASSOC);
+            if ($conflict) {
+                $this->db->roll_back();
+                return ['error' => 'schedule_conflict'];
+            }
+
+            $sessionId = uuid4();
+            $eventId = $this->googleEventId();
+            $this->db->raw(
+                "INSERT INTO classroom_live_sessions
+                 (id, classroom_id, created_by, title, description, status, starts_at, ends_at, google_event_id, request_id)
+                 VALUES (?, ?, ?, ?, ?, 'scheduled', ?, ?, ?, ?)",
+                [$sessionId, $classroomId, $teacherId, $title, $description, $startsAt, $endsAt, $eventId, $requestId]
+            );
+            $this->db->raw(
+                'INSERT INTO classroom_jitsi_sessions (session_id, provider, domain, room_name) VALUES (?, ?, ?, ?)',
+                [$sessionId, $meeting['provider'], $meeting['domain'], $meeting['roomName']]
+            );
+            $session = [
+                'id' => $sessionId, 'googleEventId' => $eventId, 'requestId' => $requestId,
+                'status' => 'scheduled', 'title' => $title, 'startsAt' => $startsAt, 'endsAt' => $endsAt,
+                'provider' => $meeting['provider'], 'domain' => $meeting['domain'], 'roomName' => $meeting['roomName'],
+            ];
+            $this->db->commit();
+            return ['session' => $session, 'classroomName' => $classroom['name'], 'duplicate' => false];
+        } catch (Throwable $error) {
+            $this->db->roll_back();
+            throw $error;
+        }
+    }
+
     public function setCalendarEvent(string $sessionId, string $eventId): void
     {
         $this->db->raw(
             "UPDATE classroom_live_sessions SET google_event_id = ?, updated_at = NOW()
-             WHERE id = ? AND status = 'live'",
+             WHERE id = ? AND status IN ('scheduled','live')",
             [$eventId, $sessionId]
         );
     }
@@ -329,7 +440,12 @@ class ClassroomMeeting_model extends Model
     {
         $this->db->raw(
             "UPDATE classroom_live_sessions SET status = 'ended', meet_url = NULL, updated_at = NOW()
-             WHERE id = ? AND status IN ('provisioning','live') AND ends_at <= NOW()",
+             WHERE id = ? AND status IN ('provisioning','scheduled','live') AND ends_at <= NOW()",
+            [$sessionId]
+        );
+        $this->db->raw(
+            "UPDATE classroom_live_sessions SET status = 'live', updated_at = NOW()
+             WHERE id = ? AND status = 'scheduled' AND starts_at <= NOW() AND ends_at > NOW()",
             [$sessionId]
         );
         $this->db->raw(
@@ -434,6 +550,19 @@ class ClassroomMeeting_model extends Model
         );
     }
 
+    public function sessionRecipientIds(string $classroomId): array
+    {
+        return array_map(
+            static fn($row) => (string)$row['user_id'],
+            $this->db->raw(
+                "SELECT user_id FROM classroom_members WHERE classroom_id = ? AND status = 'active'
+                 UNION
+                 SELECT user_id FROM classroom_teachers WHERE classroom_id = ?",
+                [$classroomId, $classroomId]
+            )->fetchAll(PDO::FETCH_ASSOC)
+        );
+    }
+
     public function activeMemberEmails(string $classroomId, int $limit = 200): array
     {
         return $this->db->raw(
@@ -449,7 +578,12 @@ class ClassroomMeeting_model extends Model
     {
         $this->db->raw(
             "UPDATE classroom_live_sessions SET status = 'ended', meet_url = NULL, updated_at = NOW()
-             WHERE classroom_id = ? AND status IN ('provisioning','live') AND ends_at <= NOW()",
+             WHERE classroom_id = ? AND status IN ('provisioning','scheduled','live') AND ends_at <= NOW()",
+            [$classroomId]
+        );
+        $this->db->raw(
+            "UPDATE classroom_live_sessions SET status = 'live', updated_at = NOW()
+             WHERE classroom_id = ? AND status = 'scheduled' AND starts_at <= NOW() AND ends_at > NOW()",
             [$classroomId]
         );
         $this->db->raw(

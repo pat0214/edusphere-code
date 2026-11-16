@@ -7,6 +7,7 @@ class CourseController extends MY_Controller
     private $courses;
     private $gamify;
     private $certificates;
+    private $materialUpload;
 
     public function __construct()
     {
@@ -21,6 +22,7 @@ class CourseController extends MY_Controller
             $this->users,
             $this->gamify,
         ]);
+        $this->materialUpload = $this->call->library('MaterialUpload');
     }
 
     public function index()
@@ -406,50 +408,13 @@ class CourseController extends MY_Controller
         $user = require_role($this->users, ['instructor']);
         $module = $this->courses->moduleCourse($moduleId);
         if (!$module || !$this->courses->courseOwner($module['course_id'], $user['id'])) fail_api('Module not found in a course you teach.', 404);
-        $file = $_FILES['file'] ?? null;
-        if (!is_array($file)) fail_api('Choose a file to upload.', 422);
-        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            $status = in_array($file['error'], [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) ? 413 : 422;
-            fail_api($status === 413 ? 'The uploaded file exceeds the server upload limit.' : 'The file could not be uploaded.', $status);
-        }
-        $maxBytes = 25 * 1024 * 1024;
-        $bytes = (int)$file['size'];
-        if ($bytes < 1 || $bytes > $maxBytes) fail_api('Files must be between 1 byte and 25 MB.', 413);
-
-        $name = basename(str_replace('\\', '/', (string)$file['name']));
-        $name = trim((string)preg_replace('/[\x00-\x1f\x7f]/', '', $name));
-        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-        $contentTypes = [
-            'pdf' => 'application/pdf',
-            'ppt' => 'application/vnd.ms-powerpoint',
-            'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            'doc' => 'application/msword',
-            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'xls' => 'application/vnd.ms-excel',
-            'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'csv' => 'text/csv',
-            'txt' => 'text/plain',
-            'md' => 'text/markdown',
-            'png' => 'image/png',
-            'jpg' => 'image/jpeg',
-            'jpeg' => 'image/jpeg',
-            'webp' => 'image/webp',
-            'gif' => 'image/gif',
-            'zip' => 'application/zip',
-        ];
-        if (!isset($contentTypes[$extension]) || !$this->validUploadContent($file['tmp_name'], $extension)) {
-            fail_api('Unsupported file type. Upload PDF, PowerPoint, Word, Excel, CSV, text, image, or ZIP files.', 415);
-        }
-        $contentType = $contentTypes[$extension];
-
-        $name = substr($name ?: "material.$extension", 0, 200);
-        $storageKey = uuid4();
         $storageRoot = rtrim(APP_DIR, '/\\') . DIRECTORY_SEPARATOR . '..' . DIRECTORY_SEPARATOR . '.data' . DIRECTORY_SEPARATOR . 'course-materials';
-        if (!is_dir($storageRoot) && !mkdir($storageRoot, 0750, true) && !is_dir($storageRoot)) {
-            fail_api('Course material storage is unavailable.', 500);
+        try {
+            $stored = $this->materialUpload->store($_FILES['file'] ?? null, $storageRoot);
+        } catch (MaterialUploadException $error) {
+            fail_api($error->getMessage(), $error->statusCode());
         }
-        $destination = $storageRoot . DIRECTORY_SEPARATOR . $storageKey;
-        if (!move_uploaded_file($file['tmp_name'], $destination)) fail_api('The uploaded file could not be stored.', 500);
+        $storageKey = $stored['storageKey'];
         $materialId = uuid4();
         try {
             $this->courses->insertMaterial([
@@ -457,18 +422,22 @@ class CourseController extends MY_Controller
                 'courseId' => $module['course_id'],
                 'moduleId' => $moduleId,
                 'uploadedBy' => $user['id'],
-                'name' => $name,
+                'name' => $stored['name'],
                 'storageKey' => $storageKey,
-                'contentType' => $contentType,
-                'bytes' => $bytes,
+                'contentType' => $stored['contentType'],
+                'bytes' => $stored['bytes'],
             ]);
         } catch (Throwable $error) {
+            $destination = $storageRoot . DIRECTORY_SEPARATOR . $storageKey;
             if (is_file($destination) && !unlink($destination)) {
                 error_log("Failed to remove orphaned course material $storageKey.");
             }
             throw $error;
         }
-        respond(['id' => $materialId, 'name' => $name, 'bytes' => $bytes, 'contentType' => $contentType], 'Course material uploaded.', 201);
+        respond([
+            'id' => $materialId, 'name' => $stored['name'], 'bytes' => $stored['bytes'],
+            'contentType' => $stored['contentType'],
+        ], 'Course material uploaded.', 201);
     }
 
     public function download_material($id)
@@ -495,39 +464,4 @@ class CourseController extends MY_Controller
         exit;
     }
 
-    private function validUploadContent($path, $extension): bool
-    {
-        $handle = fopen($path, 'rb');
-        if (!$handle) return false;
-        $header = fread($handle, 16);
-        fclose($handle);
-        if ($header === false) return false;
-
-        if ($extension === 'pdf') return str_starts_with($header, '%PDF-');
-        if ($extension === 'png') return str_starts_with($header, "\x89PNG\r\n\x1a\n");
-        if (in_array($extension, ['jpg', 'jpeg'], true)) return str_starts_with($header, "\xff\xd8\xff");
-        if ($extension === 'gif') return str_starts_with($header, 'GIF87a') || str_starts_with($header, 'GIF89a');
-        if ($extension === 'webp') return substr($header, 0, 4) === 'RIFF' && substr($header, 8, 4) === 'WEBP';
-        if (in_array($extension, ['ppt', 'doc', 'xls'], true)) return str_starts_with($header, "\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1");
-        if (in_array($extension, ['zip', 'pptx', 'docx', 'xlsx'], true)) {
-            if (!str_starts_with($header, "PK\x03\x04") && !str_starts_with($header, "PK\x05\x06")) return false;
-            if (!class_exists('ZipArchive') || $extension === 'zip') return true;
-            $archive = new ZipArchive();
-            if ($archive->open($path) !== true) return false;
-            $requiredEntry = [
-                'pptx' => 'ppt/presentation.xml',
-                'docx' => 'word/document.xml',
-                'xlsx' => 'xl/workbook.xml',
-            ][$extension];
-            $valid = $archive->locateName('[Content_Types].xml') !== false
-                && $archive->locateName($requiredEntry) !== false;
-            $archive->close();
-            return $valid;
-        }
-        if (in_array($extension, ['csv', 'txt', 'md'], true)) {
-            $contents = file_get_contents($path);
-            return is_string($contents) && strpos($contents, "\0") === false;
-        }
-        return false;
-    }
 }
