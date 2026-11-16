@@ -31,7 +31,7 @@ class ClassroomMeetingController extends MY_Controller
             'domain' => $meetingSettings['domain'],
             'configured' => $provider->configured(),
             'enabled' => $settings['classroomsEnabled'] && $settings['liveSessionsEnabled'],
-            'maxDurationMinutes' => $settings['maxLiveSessionMinutes'],
+            'maxDurationMinutes' => $this->maxSessionDuration($settings, $meetingSettings),
         ]);
     }
 
@@ -96,6 +96,7 @@ class ClassroomMeetingController extends MY_Controller
         $meetingSettings = $this->meetings->meetingSettings();
         $provider = JitsiMeetingProvider::settingsFromDatabase($meetingSettings);
         if (!$provider->configured()) fail_api('Configure the selected Jitsi provider on the backend before starting a live session.', 503);
+        $maxDuration = $this->maxSessionDuration($settings, $meetingSettings);
 
         $body = json_body();
         $requestId = (string)($body['requestId'] ?? '');
@@ -105,7 +106,7 @@ class ClassroomMeetingController extends MY_Controller
         if (!preg_match('/^[0-9a-f-]{36}$/i', $requestId)) fail_api('A valid session request ID is required.', 422);
         if ($title !== '' && (strlen($title) < 3 || strlen($title) > 160)) fail_api('Session title must be between 3 and 160 characters.', 422);
         if (strlen($description) > 1000) fail_api('Session topic cannot exceed 1,000 characters.', 422);
-        if ($duration === false || $duration < 10 || $duration > $settings['maxLiveSessionMinutes']) fail_api('Session length exceeds the administrator-configured session limit.', 422);
+        if ($duration === false || $duration < 10 || $duration > $maxDuration) fail_api('Session length must be between 10 and ' . $maxDuration . ' minutes for the selected Jitsi provider.', 422);
         $notifyStudents = $body['notifyStudents'] ?? true;
         if (!is_bool($notifyStudents)) fail_api('notifyStudents must be true or false.', 422);
 
@@ -312,5 +313,11 @@ class ClassroomMeetingController extends MY_Controller
             }
         }
         return $failed;
+    }
+
+    private function maxSessionDuration(array $settings, array $meetingSettings): int
+    {
+        $configuredLimit = (int)$settings['maxLiveSessionMinutes'];
+        return $meetingSettings['provider'] === 'public' ? min(90, $configuredLimit) : $configuredLimit;
     }
 }

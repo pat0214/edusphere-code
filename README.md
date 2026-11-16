@@ -79,7 +79,7 @@ Migration `database/migrations/007_ai_tutor.sql` is safe to rerun. If `/api/v1/h
    - In Admin Console > **Classrooms & email**, select **Self-hosted Jitsi with JWT**, enter only the Jitsi hostname (for example `meet.example.edu`, without `https://` or a path), and save. The migration defaults to self-hosted mode but leaves the domain blank until you configure it.
    - EduSphere creates a random room for each class session and issues a short-lived JWT only after checking active classroom membership. Teachers receive moderator claims; students do not. The IFrame API loads from your self-hosted domain; users can open a meeting in a new tab if embedding fails.
    - When upgrading from JaaS, remove the old `JAAS_APP_ID`, `JAAS_API_KEY_ID`, and `JAAS_PRIVATE_KEY` variables from the Render API service; this version no longer uses them.
-   - The optional `meet.jit.si` public mode remains available for testing, but it is not the selected production provider.
+   - The current demo deployment selects public `meet.jit.si`. It is a third-party service, follows Jitsi's host authentication rules, and EduSphere caps sessions to 90 minutes. For private production use, configure self-hosted Jitsi with JWT as described above.
 4. Configure Google Cloud only if you want optional Calendar invitations:
    - Enable the Google Calendar API and create an OAuth **Web application** client.
    - Add the exact Render API callback URL `https://edusphere-code.onrender.com/api/v1/classrooms/google/callback` as an authorized redirect URI. Update `GOOGLE_OAUTH_REDIRECT_URI` if your API URL differs.
