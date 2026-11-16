@@ -137,7 +137,8 @@ class AiTutorController extends MY_Controller
         $persona = $this->systemInstruction($mode, $action, $hintLevel);
         $usage = [];
         try {
-            $reply = GeminiPathCoach::chat($context, $history, $message, $persona, $usage, $model, true);
+            $maxOutputTokens = $action === 'solution' ? 3072 : 1024;
+            $reply = GeminiPathCoach::chat($context, $history, $message, $persona, $usage, $model, true, $maxOutputTokens);
         } catch (Throwable $error) {
             $status = (int)$error->getCode();
             $this->tutor->fail(

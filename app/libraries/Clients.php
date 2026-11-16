@@ -607,7 +607,8 @@ class GeminiPathCoach
         ?string $systemInstruction = null,
         ?array &$usage = null,
         ?string $modelOverride = null,
-        bool $throwOnError = false
+        bool $throwOnError = false,
+        int $maxOutputTokens = 1024
     ): string
     {
         $apiKey = trim((string)getenv('GEMINI_API_KEY'));
@@ -650,7 +651,7 @@ class GeminiPathCoach
             'contents' => $contents,
             'generationConfig' => [
                 'temperature' => 0.5,
-                'maxOutputTokens' => 256,
+                'maxOutputTokens' => $maxOutputTokens,
             ],
         ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
         if ($payload === false) {
